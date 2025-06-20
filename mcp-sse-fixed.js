@@ -81,33 +81,301 @@ class N8nMcpServer {
   }
 
   async listWorkflows(args = {}) {
-    const { limit = 50 } = args;
-    const response = await n8nApi.get('/workflows', { params: { limit } });
-    return {
-      success: true,
-      data: response.data.data,
-      count: response.data.data.length,
-      total: response.data.nextCursor ? 'More available' : response.data.data.length
-    };
+    try {
+      const { limit = 50 } = args;
+      const response = await n8nApi.get('/workflows', { params: { limit } });
+      return {
+        success: true,
+        data: response.data.data,
+        count: response.data.data.length,
+        total: response.data.nextCursor ? 'More available' : response.data.data.length,
+        message: `Retrieved ${response.data.data.length} workflows successfully`
+      };
+    } catch (error) {
+      console.error('Error listing workflows:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to list workflows',
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
   }
 
   async getWorkflow(args) {
-    const { workflowId } = args;
-    const response = await n8nApi.get(`/workflows/${workflowId}`);
-    return {
-      success: true,
-      data: response.data.data
-    };
+    try {
+      const { workflowId } = args;
+      if (!workflowId) {
+        throw new Error('workflowId is required');
+      }
+      
+      const response = await n8nApi.get(`/workflows/${workflowId}`);
+      
+      if (response.data && response.data.data) {
+        return {
+          success: true,
+          data: response.data.data,
+          message: `Workflow ${workflowId} retrieved successfully`
+        };
+      } else {
+        // Handle case where response structure is different
+        return {
+          success: true,
+          data: response.data,
+          message: `Workflow ${workflowId} retrieved successfully`,
+          note: 'Response structure may vary'
+        };
+      }
+    } catch (error) {
+      console.error(`Error getting workflow ${args.workflowId}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to get workflow ${args.workflowId}`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
   }
 
   async listExecutions(args = {}) {
-    const { limit = 10 } = args;
-    const response = await n8nApi.get('/executions', { params: { limit } });
-    return {
-      success: true,
-      data: response.data.data,
-      count: response.data.data.length
-    };
+    try {
+      const { limit = 10 } = args;
+      const response = await n8nApi.get('/executions', { params: { limit } });
+      return {
+        success: true,
+        data: response.data.data,
+        count: response.data.data.length,
+        message: `Retrieved ${response.data.data.length} executions successfully`
+      };
+    } catch (error) {
+      console.error('Error listing executions:', error.message);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to list executions',
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async createWorkflow(args) {
+    try {
+      const { name, nodes, connections = {}, settings = {} } = args;
+      
+      if (!name || !nodes || !Array.isArray(nodes) || nodes.length === 0) {
+        throw new Error('Name and nodes array are required');
+      }
+      
+      const workflowData = {
+        name,
+        nodes,
+        connections,
+        settings,
+        active: false
+      };
+      
+      const response = await n8nApi.post('/workflows', workflowData);
+      return {
+        success: true,
+        data: response.data.data,
+        message: `Workflow "${name}" created successfully`
+      };
+    } catch (error) {
+      console.error(`Error creating workflow:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to create workflow`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async updateWorkflow(args) {
+    try {
+      const { workflowId, ...updates } = args;
+      
+      if (!workflowId) {
+        throw new Error('workflowId is required');
+      }
+      
+      // Use PUT instead of PATCH as some n8n versions don't support PATCH
+      const response = await n8nApi.put(`/workflows/${workflowId}`, updates);
+      return {
+        success: true,
+        data: response.data.data,
+        message: `Workflow ${workflowId} updated successfully`
+      };
+    } catch (error) {
+      console.error(`Error updating workflow ${args.workflowId}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to update workflow ${args.workflowId}`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async activateWorkflow(args) {
+    try {
+      const { workflowId } = args;
+      
+      if (!workflowId) {
+        throw new Error('workflowId is required');
+      }
+      
+      // Use POST to /workflows/{id}/activate endpoint
+      const response = await n8nApi.post(`/workflows/${workflowId}/activate`);
+      return {
+        success: true,
+        data: response.data.data || { id: workflowId, active: true },
+        message: `Workflow ${workflowId} activated successfully`
+      };
+    } catch (error) {
+      console.error(`Error activating workflow ${args.workflowId}:`, error.message);
+      // If the specific endpoint doesn't exist, try the general approach
+      if (error.response?.status === 404) {
+        try {
+          // Get the workflow first to preserve its structure
+          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`);
+          const workflowData = { ...getResponse.data.data, active: true };
+          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData);
+          return {
+            success: true,
+            data: updateResponse.data.data,
+            message: `Workflow ${args.workflowId} activated successfully (via update)`
+          };
+        } catch (updateError) {
+          return {
+            success: false,
+            error: `Both activation methods failed: ${error.message} and ${updateError.message}`,
+            message: `Failed to activate workflow ${args.workflowId}`,
+            statusCode: error.response?.status || 'unknown'
+          };
+        }
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to activate workflow ${args.workflowId}`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async deactivateWorkflow(args) {
+    try {
+      const { workflowId } = args;
+      
+      if (!workflowId) {
+        throw new Error('workflowId is required');
+      }
+      
+      // Use POST to /workflows/{id}/deactivate endpoint
+      const response = await n8nApi.post(`/workflows/${workflowId}/deactivate`);
+      return {
+        success: true,
+        data: response.data.data || { id: workflowId, active: false },
+        message: `Workflow ${workflowId} deactivated successfully`
+      };
+    } catch (error) {
+      console.error(`Error deactivating workflow ${args.workflowId}:`, error.message);
+      // If the specific endpoint doesn't exist, try the general approach
+      if (error.response?.status === 404) {
+        try {
+          // Get the workflow first to preserve its structure
+          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`);
+          const workflowData = { ...getResponse.data.data, active: false };
+          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData);
+          return {
+            success: true,
+            data: updateResponse.data.data,
+            message: `Workflow ${args.workflowId} deactivated successfully (via update)`
+          };
+        } catch (updateError) {
+          return {
+            success: false,
+            error: `Both deactivation methods failed: ${error.message} and ${updateError.message}`,
+            message: `Failed to deactivate workflow ${args.workflowId}`,
+            statusCode: error.response?.status || 'unknown'
+          };
+        }
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to deactivate workflow ${args.workflowId}`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async listCredentials(args) {
+    try {
+      const { limit = 50 } = args;
+      const response = await n8nApi.get('/credentials', { params: { limit } });
+      return {
+        success: true,
+        data: response.data.data,
+        count: response.data.data.length,
+        message: `Retrieved ${response.data.data.length} credentials successfully`
+      };
+    } catch (error) {
+      console.error('Error listing credentials:', error.message);
+      // Credentials endpoint might not be available in all n8n versions or configurations
+      if (error.response?.status === 405 || error.response?.status === 404) {
+        return {
+          success: false,
+          error: 'Credentials API not available',
+          message: 'n8n credentials endpoint is not accessible (this is normal for security reasons)',
+          statusCode: error.response?.status,
+          note: 'Credentials management may be restricted in your n8n instance'
+        };
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to list credentials',
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
+  }
+
+  async createCredential(args) {
+    try {
+      const { name, type, data } = args;
+      
+      if (!name || !type) {
+        throw new Error('Name and type are required');
+      }
+      
+      const credentialData = { name, type, data };
+      const response = await n8nApi.post('/credentials', credentialData);
+      return {
+        success: true,
+        data: response.data.data,
+        message: `Credential "${name}" created successfully`
+      };
+    } catch (error) {
+      console.error(`Error creating credential:`, error.message);
+      // Credentials endpoint might not be available in all n8n versions or configurations
+      if (error.response?.status === 405 || error.response?.status === 404) {
+        return {
+          success: false,
+          error: 'Credentials API not available',
+          message: 'n8n credentials endpoint is not accessible (this is normal for security reasons)',
+          statusCode: error.response?.status,
+          note: 'Credentials management may be restricted in your n8n instance'
+        };
+      }
+      return {
+        success: false,
+        error: error.message,
+        message: `Failed to create credential`,
+        statusCode: error.response?.status || 'unknown'
+      };
+    }
   }
 
   // Handle JSON-RPC messages
@@ -201,6 +469,122 @@ class N8nMcpServer {
                     }
                   }
                 }
+              },
+              {
+                name: 'create_workflow',
+                description: 'Create a new workflow',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    name: {
+                      type: 'string',
+                      description: 'Name of the workflow'
+                    },
+                    nodes: {
+                      type: 'array',
+                      description: 'Array of workflow nodes'
+                    },
+                    connections: {
+                      type: 'object',
+                      description: 'Node connections configuration',
+                      default: {}
+                    },
+                    settings: {
+                      type: 'object',
+                      description: 'Workflow settings',
+                      default: {}
+                    }
+                  },
+                  required: ['name', 'nodes']
+                }
+              },
+              {
+                name: 'update_workflow',
+                description: 'Update an existing workflow',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    workflowId: {
+                      type: 'string',
+                      description: 'The workflow ID to update'
+                    },
+                    name: {
+                      type: 'string',
+                      description: 'New name for the workflow'
+                    },
+                    nodes: {
+                      type: 'array',
+                      description: 'Updated array of workflow nodes'
+                    },
+                    connections: {
+                      type: 'object',
+                      description: 'Updated node connections configuration'
+                    },
+                    settings: {
+                      type: 'object',
+                      description: 'Updated workflow settings'
+                    }
+                  },
+                  required: ['workflowId']
+                }
+              },
+              {
+                name: 'activate_workflow',
+                description: 'Activate a workflow by ID (toggle on)',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    workflowId: {
+                      type: 'string',
+                      description: 'The workflow ID to activate'
+                    }
+                  },
+                  required: ['workflowId']
+                }
+              },
+              {
+                name: 'deactivate_workflow',
+                description: 'Deactivate a workflow by ID (toggle off)',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    workflowId: {
+                      type: 'string',
+                      description: 'The workflow ID to deactivate'
+                    }
+                  },
+                  required: ['workflowId']
+                }
+              },
+              {
+                name: 'list_credentials',
+                description: 'List all credentials',
+                inputSchema: {
+                  type: 'object',
+                  properties: {}
+                }
+              },
+              {
+                name: 'create_credential',
+                description: 'Create a new credential',
+                inputSchema: {
+                  type: 'object',
+                  properties: {
+                    name: {
+                      type: 'string',
+                      description: 'Name of the credential'
+                    },
+                    type: {
+                      type: 'string',
+                      description: 'Type of the credential'
+                    },
+                    data: {
+                      type: 'object',
+                      description: 'Credential data'
+                    }
+                  },
+                  required: ['name', 'type', 'data']
+                }
               }
             ]
           },
@@ -225,6 +609,24 @@ class N8nMcpServer {
             break;
           case 'list_executions':
             result = await this.listExecutions(args);
+            break;
+          case 'create_workflow':
+            result = await this.createWorkflow(args);
+            break;
+          case 'update_workflow':
+            result = await this.updateWorkflow(args);
+            break;
+          case 'activate_workflow':
+            result = await this.activateWorkflow(args);
+            break;
+          case 'deactivate_workflow':
+            result = await this.deactivateWorkflow(args);
+            break;
+          case 'list_credentials':
+            result = await this.listCredentials(args);
+            break;
+          case 'create_credential':
+            result = await this.createCredential(args);
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);

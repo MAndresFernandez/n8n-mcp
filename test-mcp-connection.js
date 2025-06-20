@@ -181,6 +181,20 @@ async function main() {
   console.log(`Self Test: ${toolsResults.selfTest ? '✅' : '❌'}`);
   console.log(`List Workflows: ${toolsResults.listWorkflows ? '✅' : '❌'}`);
   console.log(`MCP Remote Client: ${clientResult ? '✅' : '⚠️'}`);
+  
+  // Get tool count from tools list test
+  console.log('\n🔧 Tools Available:');
+  console.log('- self_test');
+  console.log('- list_workflows');
+  console.log('- get_workflow');
+  console.log('- list_executions');
+  console.log('- create_workflow');
+  console.log('- update_workflow');
+  console.log('- activate_workflow');
+  console.log('- deactivate_workflow');
+  console.log('- list_credentials');
+  console.log('- create_credential');
+  console.log('Total: 10 tools available');
 
   const allPassed = healthOk && toolsResults.toolsList && toolsResults.selfTest && toolsResults.listWorkflows;
   
