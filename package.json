@@ -6,14 +6,8 @@
     "type": "module",
     "scripts": {
         "start": "node index.js",
-        "test": "node test-all-tools.js",
         "health": "curl -s http://localhost:3001/health | jq",
-        "self-test": "curl -s -X POST http://localhost:3001/test | jq '.result.summary'",
-        "dev": "DEBUG=1 node index.js",
-        "mcp-test": "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{}}' | node index.js",
-        "test-sse": "node test-sse-simple.js",
-        "test-sse-mcp": "node test-sse-mcp.js",
-        "sse-curl": "curl -N -H 'Accept: text/event-stream' http://localhost:3001/sse"
+        "dev": "DEBUG=1 node index.js"
     },
     "keywords": [
         "n8n",

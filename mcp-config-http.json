@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "n8n": {
-      "url": "http://localhost:3001/sse"
-    }
-  }
-}

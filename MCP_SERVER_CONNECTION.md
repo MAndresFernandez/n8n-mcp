@@ -7,8 +7,19 @@ The MCP server has been successfully updated and now supports **10 tools** (expa
 ## 🚀 Quick Start
 
 ### 1. Start the MCP Server
+
 ```bash
-node mcp-sse-fixed.js
+# Install dependencies (if not already done)
+npm install
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your n8n API key and URL
+
+# Start the server using the standard entry point
+npm start
+# OR
+source .env && node index.js
 ```
 
 The server will start on port 3001 and display:
