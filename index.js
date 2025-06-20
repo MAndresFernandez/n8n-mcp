@@ -8,7 +8,7 @@ import url from 'url';
 // Load environment variables
 dotenv.config();
 
-const N8N_API_KEY = process.env.N8N_API_KEY || process.env.N8N_API;
+const N8N_API_KEY = process.env.N8N_API_KEY
 const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://localhost:5678';
 const MCP_PORT = process.env.MCP_PORT || 3001;
 
