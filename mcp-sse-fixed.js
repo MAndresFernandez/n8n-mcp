@@ -166,26 +166,37 @@ class N8nMcpServer {
         throw new Error('Name and nodes array are required');
       }
       
+      // Validate nodes have required fields
+      for (const node of nodes) {
+        if (!node.name || !node.type || !node.id) {
+          throw new Error('Each node must have name, type, and id fields');
+        }
+        if (!node.position || !Array.isArray(node.position) || node.position.length !== 2) {
+          throw new Error('Each node must have a position array with [x, y] coordinates');
+        }
+      }
+      
+      // Create workflow data (active field is read-only, don't include it)
       const workflowData = {
         name,
         nodes,
         connections,
-        settings,
-        active: false
+        settings
       };
       
       const response = await n8nApi.post('/workflows', workflowData);
       return {
         success: true,
-        data: response.data.data,
-        message: `Workflow "${name}" created successfully`
+        data: response.data,
+        message: `Workflow "${name}" created successfully with ID: ${response.data.id}`
       };
     } catch (error) {
       console.error(`Error creating workflow:`, error.message);
+      const errorMsg = error.response?.data?.message || error.message;
       return {
         success: false,
-        error: error.message,
-        message: `Failed to create workflow`,
+        error: errorMsg,
+        message: `Failed to create workflow: ${errorMsg}`,
         statusCode: error.response?.status || 'unknown'
       };
     }
@@ -199,19 +210,47 @@ class N8nMcpServer {
         throw new Error('workflowId is required');
       }
       
-      // Use PUT instead of PATCH as some n8n versions don't support PATCH
-      const response = await n8nApi.put(`/workflows/${workflowId}`, updates);
+      // Get the current workflow first to preserve its structure
+      const currentResponse = await n8nApi.get(`/workflows/${workflowId}`);
+      const currentWorkflow = currentResponse.data;
+      
+      // Merge updates with current workflow, excluding read-only fields
+      const {
+        createdAt, updatedAt, id, active, isArchived, 
+        versionId, triggerCount, shared, tags, 
+        staticData, meta, pinData, ...updatableFields 
+      } = currentWorkflow;
+      
+      const workflowData = {
+        ...updatableFields,
+        ...updates
+      };
+      
+      // Validate nodes if provided
+      if (updates.nodes) {
+        for (const node of updates.nodes) {
+          if (!node.name || !node.type || !node.id) {
+            throw new Error('Each node must have name, type, and id fields');
+          }
+          if (!node.position || !Array.isArray(node.position) || node.position.length !== 2) {
+            throw new Error('Each node must have a position array with [x, y] coordinates');
+          }
+        }
+      }
+      
+      const response = await n8nApi.put(`/workflows/${workflowId}`, workflowData);
       return {
         success: true,
-        data: response.data.data,
-        message: `Workflow ${workflowId} updated successfully`
+        data: response.data,
+        message: `Workflow "${response.data.name}" (${workflowId}) updated successfully`
       };
     } catch (error) {
       console.error(`Error updating workflow ${args.workflowId}:`, error.message);
+      const errorMsg = error.response?.data?.message || error.message;
       return {
         success: false,
-        error: error.message,
-        message: `Failed to update workflow ${args.workflowId}`,
+        error: errorMsg,
+        message: `Failed to update workflow ${args.workflowId}: ${errorMsg}`,
         statusCode: error.response?.status || 'unknown'
       };
     }
