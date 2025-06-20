@@ -33,6 +33,21 @@ services:
       - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
       - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
       - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+      # Webhook and API configuration
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_EDITOR_BASE_URL=http://localhost:5678
+      # Enable API
+      - N8N_API_KEY_PREFIX=n8n_api_
+      - N8N_USER_MANAGEMENT_DISABLED=true
+      # Security settings
+      - N8N_SECURE_COOKIE=false
+      - N8N_DIAGNOSTICS_ENABLED=false
+      # Performance settings
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
     ports:
       - 5678:5678
     links:
@@ -42,3 +57,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+
+  chromium:
+    image: ghcr.io/browserless/chromium:v2.31.1
+    restart: always
+    environment:
+      - MAX_CONCURRENT_SESSIONS=10
+      - PRE_REQUEST_HEALTH_CHECK=true
+    ports:
+      - 5679:3000
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

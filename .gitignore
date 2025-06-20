@@ -1,2 +1,9 @@
 **/.env
 **/node_modules
+local_workflows# Workflow files may contain sensitive data - review before committing
+# workflows/*.json
+local_instructions.md
+mcp-config.json
+public
+workflows
+.cursor/rules/local-instruction.mdc
