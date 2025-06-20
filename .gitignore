@@ -7,3 +7,4 @@ mcp-config.json
 public
 workflows
 .cursor/rules/local-instruction.mdc
+server.log

@@ -43,7 +43,7 @@ MCP_PORT=3001
 ## 📋 Available Tools (10 Total)
 
 ### ✅ Core Tools (Working)
-- `self_test` - Test n8n connection and permissions
+- `self_test` - **COMPREHENSIVE DIAGNOSTIC TOOL** - Tests all 10 MCP tools with sample inputs and returns detailed input/output for each test, plus success rates and automatic cleanup
 - `list_workflows` - List all workflows in n8n
 - `get_workflow` - Get a specific workflow by ID **[FIXED - now returns full workflow data]**
 - `list_executions` - List workflow executions
@@ -64,8 +64,21 @@ MCP_PORT=3001
 
 ## 🧪 Testing
 
-### Automated Test
-Run the comprehensive test suite:
+### Comprehensive Self-Test (Recommended)
+Run the built-in comprehensive diagnostic:
+```bash
+curl -X POST http://localhost:3001/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}' && \
+curl -X POST http://localhost:3001/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"self_test","arguments":{}}}'
+```
+
+### External Test Suite
+Run the external test script:
 ```bash
 node test-mcp-connection.js
 ```
@@ -115,20 +128,31 @@ npx @modelcontextprotocol/inspector
 
 ## 📊 Test Results
 
-**Last Test Run:** ✅ All core tests passed!
+**Last Test Run:** ✅ 8/10 tools fully functional (80% success rate)
 
-| Test                | Status                |
-| ------------------- | --------------------- |
-| Health Check        | ✅                     |
-| Tools List          | ✅ (10 tools)          |
-| Self Test           | ✅                     |
-| List Workflows      | ✅                     |
-| Get Workflow        | ✅ (FIXED - full data) |
-| Create Workflow     | ✅                     |
-| Update Workflow     | ✅                     |
-| Activate/Deactivate | ⚠️ (API limitations)   |
-| Credentials         | ⚠️ (API limitations)   |
-| MCP Remote Client   | ⚠️ (timeout expected)  |
+## 🧪 Comprehensive Self-Test Results
+
+Run `self_test` to get detailed diagnostics of all tools:
+
+| Test                | Status | Input/Output Available         |
+| ------------------- | ------ | ------------------------------ |
+| n8n API Connection  | ✅ PASS | ✅                              |
+| list_workflows      | ✅ PASS | ✅                              |
+| get_workflow        | ✅ PASS | ✅                              |
+| list_executions     | ✅ PASS | ✅                              |
+| create_workflow     | ✅ PASS | ✅                              |
+| update_workflow     | ✅ PASS | ✅                              |
+| activate_workflow   | ❌ FAIL | ✅ (shows API error)            |
+| deactivate_workflow | ✅ PASS | ✅                              |
+| list_credentials    | ❌ FAIL | ✅ (shows security restriction) |
+| create_credential   | ✅ PASS | ✅                              |
+
+**Self-test features:**
+- 🧪 Tests all 10 tools with real sample inputs
+- 📊 Returns detailed input/output for each test
+- 🔍 Shows exact error messages and status codes
+- 🧹 Automatically cleans up test workflows
+- 📈 Provides success rate statistics
 
 ## 🐛 Troubleshooting
 

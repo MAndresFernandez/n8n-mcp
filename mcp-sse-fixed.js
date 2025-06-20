@@ -50,34 +50,541 @@ class N8nMcpServer {
       summary: {
         total: 0,
         passed: 0,
-        failed: 0
+        failed: 0,
+        skipped: 0
       }
     };
 
-    // Test n8n connection
+    console.log('🧪 Starting comprehensive self-test of all MCP tools...');
+
+    // Test 1: Basic n8n API Connection
+    await this.testBasicConnection(results);
+
+    // Test 2: list_workflows
+    await this.testListWorkflows(results);
+
+    // Test 3: get_workflow (if workflows exist)
+    await this.testGetWorkflow(results);
+
+    // Test 4: list_executions
+    await this.testListExecutions(results);
+
+    // Test 5: create_workflow
+    await this.testCreateWorkflow(results);
+
+    // Test 6: update_workflow (if create succeeded)
+    await this.testUpdateWorkflow(results);
+
+    // Test 7: activate_workflow (if workflow exists)
+    await this.testActivateWorkflow(results);
+
+    // Test 8: deactivate_workflow (if workflow exists)
+    await this.testDeactivateWorkflow(results);
+
+    // Test 9: list_credentials
+    await this.testListCredentials(results);
+
+    // Test 10: create_credential
+    await this.testCreateCredential(results);
+
+    // Clean up test workflows
+    await this.cleanupTestWorkflows(results);
+
+    const successRate = ((results.summary.passed / results.summary.total) * 100).toFixed(1);
+    
+    return {
+      success: true,
+      data: results,
+      message: `Self-test completed: ${results.summary.passed}/${results.summary.total} tests passed (${successRate}% success rate)`
+    };
+  }
+
+  async testBasicConnection(results) {
+    const testName = 'n8n API Connection';
     try {
-      await n8nApi.get('/workflows', { params: { limit: 1 } });
+      const response = await n8nApi.get('/workflows', { params: { limit: 1 } });
       results.tests.push({
-        name: 'n8n API Connection',
+        name: testName,
         status: 'PASS',
-        message: 'Successfully connected to n8n API'
+        message: 'Successfully connected to n8n API',
+        input: { endpoint: '/workflows', params: { limit: 1 } },
+        output: { status: 'connected', workflowCount: response.data.data?.length || 0 }
       });
       results.summary.passed++;
     } catch (error) {
       results.tests.push({
-        name: 'n8n API Connection',
+        name: testName,
         status: 'FAIL',
-        message: `Failed to connect to n8n API: ${error.message}`
+        message: `Failed to connect to n8n API: ${error.message}`,
+        input: { endpoint: '/workflows', params: { limit: 1 } },
+        output: { error: error.message }
       });
       results.summary.failed++;
     }
     results.summary.total++;
+  }
 
-    return {
-      success: true,
-      data: results,
-      message: `Self-test completed: ${results.summary.passed}/${results.summary.total} tests passed`
+  async testListWorkflows(results) {
+    const testName = 'list_workflows';
+    const testInput = { limit: 3 };
+    
+    try {
+      const result = await this.listWorkflows(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully listed workflows' : 'Failed to list workflows'),
+        input: testInput,
+        output: {
+          success: result.success,
+          count: result.count,
+          hasData: !!result.data,
+          error: result.error
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testGetWorkflow(results) {
+    const testName = 'get_workflow';
+    
+    // First get a workflow ID to test with
+    let testWorkflowId = null;
+    try {
+      const workflows = await this.listWorkflows({ limit: 1 });
+      if (workflows.success && workflows.data && workflows.data.length > 0) {
+        testWorkflowId = workflows.data[0].id;
+      }
+    } catch (error) {
+      // Ignore error, will skip test
+    }
+
+    if (!testWorkflowId) {
+      results.tests.push({
+        name: testName,
+        status: 'SKIP',
+        message: 'No workflows available to test with',
+        input: { note: 'Requires existing workflow' },
+        output: { skipped: true, reason: 'No workflows found' }
+      });
+      results.summary.skipped++;
+      results.summary.total++;
+      return;
+    }
+
+    const testInput = { workflowId: testWorkflowId };
+    
+    try {
+      const result = await this.getWorkflow(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully retrieved workflow' : 'Failed to retrieve workflow'),
+        input: testInput,
+        output: {
+          success: result.success,
+          workflowName: result.data?.name,
+          nodeCount: result.data?.nodes?.length,
+          hasConnections: !!result.data?.connections,
+          error: result.error
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testListExecutions(results) {
+    const testName = 'list_executions';
+    const testInput = { limit: 2 };
+    
+    try {
+      const result = await this.listExecutions(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully listed executions' : 'Failed to list executions'),
+        input: testInput,
+        output: {
+          success: result.success,
+          count: result.count,
+          hasData: !!result.data,
+          error: result.error
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testCreateWorkflow(results) {
+    const testName = 'create_workflow';
+    const testInput = {
+      name: 'Self-Test Workflow',
+      nodes: [
+        {
+          name: 'Manual Trigger',
+          type: 'n8n-nodes-base.manualTrigger',
+          parameters: {},
+          position: [240, 300],
+          typeVersion: 1,
+          id: 'self-test-manual-trigger'
+        }
+      ],
+      connections: {},
+      settings: {}
     };
+    
+    try {
+      const result = await this.createWorkflow(testInput);
+      
+      // Store workflow ID for cleanup and update test
+      if (result.success && result.data?.id) {
+        if (!results.testWorkflowIds) results.testWorkflowIds = [];
+        results.testWorkflowIds.push(result.data.id);
+      }
+      
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully created workflow' : 'Failed to create workflow'),
+        input: testInput,
+        output: {
+          success: result.success,
+          workflowId: result.data?.id,
+          workflowName: result.data?.name,
+          nodeCount: result.data?.nodes?.length,
+          error: result.error
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testUpdateWorkflow(results) {
+    const testName = 'update_workflow';
+    
+    // Check if we have a test workflow from create test
+    const testWorkflowId = results.testWorkflowIds?.[0];
+    
+    if (!testWorkflowId) {
+      results.tests.push({
+        name: testName,
+        status: 'SKIP',
+        message: 'No test workflow available (create_workflow must succeed first)',
+        input: { note: 'Requires successful create_workflow' },
+        output: { skipped: true, reason: 'No test workflow ID available' }
+      });
+      results.summary.skipped++;
+      results.summary.total++;
+      return;
+    }
+
+    const testInput = {
+      workflowId: testWorkflowId,
+      name: 'Updated Self-Test Workflow',
+      nodes: [
+        {
+          name: 'Manual Trigger',
+          type: 'n8n-nodes-base.manualTrigger',
+          parameters: {},
+          position: [240, 300],
+          typeVersion: 1,
+          id: 'self-test-manual-trigger'
+        },
+        {
+          name: 'Test Set Node',
+          type: 'n8n-nodes-base.set',
+          parameters: {
+            values: {
+              string: [{ name: 'test', value: 'self-test-value' }]
+            }
+          },
+          position: [460, 300],
+          typeVersion: 2,
+          id: 'self-test-set-node'
+        }
+      ],
+      connections: {
+        'Manual Trigger': {
+          main: [[{ node: 'Test Set Node', type: 'main', index: 0 }]]
+        }
+      }
+    };
+    
+    try {
+      const result = await this.updateWorkflow(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully updated workflow' : 'Failed to update workflow'),
+        input: testInput,
+        output: {
+          success: result.success,
+          workflowId: result.data?.id,
+          workflowName: result.data?.name,
+          nodeCount: result.data?.nodes?.length,
+          error: result.error
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testActivateWorkflow(results) {
+    const testName = 'activate_workflow';
+    
+    const testWorkflowId = results.testWorkflowIds?.[0];
+    
+    if (!testWorkflowId) {
+      results.tests.push({
+        name: testName,
+        status: 'SKIP',
+        message: 'No test workflow available',
+        input: { note: 'Requires test workflow' },
+        output: { skipped: true, reason: 'No test workflow ID available' }
+      });
+      results.summary.skipped++;
+      results.summary.total++;
+      return;
+    }
+
+    const testInput = { workflowId: testWorkflowId };
+    
+    try {
+      const result = await this.activateWorkflow(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully activated workflow' : 'Failed to activate workflow'),
+        input: testInput,
+        output: {
+          success: result.success,
+          workflowId: result.data?.id,
+          active: result.data?.active,
+          error: result.error,
+          statusCode: result.statusCode
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testDeactivateWorkflow(results) {
+    const testName = 'deactivate_workflow';
+    
+    const testWorkflowId = results.testWorkflowIds?.[0];
+    
+    if (!testWorkflowId) {
+      results.tests.push({
+        name: testName,
+        status: 'SKIP',
+        message: 'No test workflow available',
+        input: { note: 'Requires test workflow' },
+        output: { skipped: true, reason: 'No test workflow ID available' }
+      });
+      results.summary.skipped++;
+      results.summary.total++;
+      return;
+    }
+
+    const testInput = { workflowId: testWorkflowId };
+    
+    try {
+      const result = await this.deactivateWorkflow(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully deactivated workflow' : 'Failed to deactivate workflow'),
+        input: testInput,
+        output: {
+          success: result.success,
+          workflowId: result.data?.id,
+          active: result.data?.active,
+          error: result.error,
+          statusCode: result.statusCode
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testListCredentials(results) {
+    const testName = 'list_credentials';
+    const testInput = { limit: 5 };
+    
+    try {
+      const result = await this.listCredentials(testInput);
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully listed credentials' : 'Failed to list credentials'),
+        input: testInput,
+        output: {
+          success: result.success,
+          count: result.count,
+          hasData: !!result.data,
+          error: result.error,
+          statusCode: result.statusCode,
+          note: result.note
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async testCreateCredential(results) {
+    const testName = 'create_credential';
+    const testInput = {
+      name: 'Self-Test Credential',
+      type: 'httpBasicAuth',
+      data: {
+        user: 'test-user',
+        password: 'test-password'
+      }
+    };
+    
+    try {
+      const result = await this.createCredential(testInput);
+      
+      // Store credential ID for potential cleanup
+      if (result.success && result.data?.id) {
+        if (!results.testCredentialIds) results.testCredentialIds = [];
+        results.testCredentialIds.push(result.data.id);
+      }
+      
+      results.tests.push({
+        name: testName,
+        status: result.success ? 'PASS' : 'FAIL',
+        message: result.message || (result.success ? 'Successfully created credential' : 'Failed to create credential'),
+        input: testInput,
+        output: {
+          success: result.success,
+          credentialId: result.data?.id,
+          credentialName: result.data?.name,
+          hasData: !!result.data,
+          error: result.error,
+          statusCode: result.statusCode,
+          note: result.note
+        }
+      });
+      if (result.success) results.summary.passed++;
+      else results.summary.failed++;
+    } catch (error) {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Unexpected error: ${error.message}`,
+        input: testInput,
+        output: { error: error.message }
+      });
+      results.summary.failed++;
+    }
+    results.summary.total++;
+  }
+
+  async cleanupTestWorkflows(results) {
+    if (!results.testWorkflowIds || results.testWorkflowIds.length === 0) {
+      return;
+    }
+
+    console.log('🧹 Cleaning up test workflows...');
+    
+    for (const workflowId of results.testWorkflowIds) {
+      try {
+        await n8nApi.delete(`/workflows/${workflowId}`);
+        console.log(`✅ Deleted test workflow: ${workflowId}`);
+      } catch (error) {
+        console.log(`⚠️ Failed to delete test workflow ${workflowId}: ${error.message}`);
+      }
+    }
   }
 
   async listWorkflows(args = {}) {
