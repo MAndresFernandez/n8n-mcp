@@ -12,18 +12,13 @@ const N8N_API_KEY = process.env.N8N_API_KEY
 const N8N_BASE_URL = process.env.N8N_BASE_URL || 'http://localhost:5678';
 const MCP_PORT = process.env.MCP_PORT || 3001;
 
-// Validate environment variables
-if (!N8N_API_KEY) {
-  console.error('❌ N8N_API_KEY is required in .env file');
-  console.error('Set it as: N8N_API_KEY=your_api_key_here node mcp-sse-fixed.js');
-  process.exit(1);
-}
+// Check if API key is available in environment
+const hasEnvApiKey = !!N8N_API_KEY;
 
-// Create axios instance for n8n API
+// Create base axios instance for n8n API (headers will be added per request)
 const n8nApi = axios.create({
   baseURL: `${N8N_BASE_URL}/api/v1`,
   headers: {
-    'X-N8N-API-KEY': N8N_API_KEY,
     'Content-Type': 'application/json',
   },
   timeout: 10000,
@@ -33,6 +28,9 @@ class N8nMcpServer {
   constructor() {
     this.initialized = false;
     this.setupErrorHandling();
+    // Store client credentials by session ID
+    this.clientCredentials = new Map();
+    this.sessionCounter = 0;
   }
 
   setupErrorHandling() {
@@ -42,8 +40,95 @@ class N8nMcpServer {
     });
   }
 
+  // Store credentials when client connects with auth header
+  storeClientCredentials(headers = {}) {
+    const headerApiKey = this.extractApiKeyFromHeaders(headers);
+    if (headerApiKey) {
+      this.sessionCounter++;
+      const sessionId = `session_${this.sessionCounter}_${Date.now()}`;
+      this.clientCredentials.set(sessionId, headerApiKey);
+      console.log(`🔐 Stored credentials for session: ${sessionId}`);
+      return sessionId;
+    }
+    return null;
+  }
+
+  // Extract API key from various header formats
+  extractApiKeyFromHeaders(headers = {}) {
+    // Check for N8N-specific headers first (priority)
+    const n8nApiKey = headers['n8n-api-key'] || headers['N8N-API-KEY'] || headers['N8N_API_KEY'];
+    if (n8nApiKey) {
+      return n8nApiKey;
+    }
+    
+    // Fallback to Bearer token authorization
+    const authHeader = headers['authorization'] || headers['Authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const bearerToken = authHeader.substring(7); // Remove 'Bearer ' prefix
+      if (bearerToken) {
+        return bearerToken;
+      }
+    }
+    
+    return null;
+  }
+
+  // Authentication middleware - extracts API key from stored session or headers/environment
+  getApiKey(sessionId = null, headers = {}) {
+    // Check stored session credentials first (priority)
+    if (sessionId && this.clientCredentials.has(sessionId)) {
+      return this.clientCredentials.get(sessionId);
+    }
+    
+    // Check for API key in headers (N8N headers or Bearer token)
+    const headerApiKey = this.extractApiKeyFromHeaders(headers);
+    if (headerApiKey) {
+      return headerApiKey;
+    }
+    
+    // Fall back to environment variable
+    return N8N_API_KEY;
+  }
+
+  // Create authenticated axios config - uses session or headers
+  getAuthenticatedConfig(headers = {}, sessionId = null) {
+    const apiKey = this.getApiKey(sessionId, headers);
+    if (!apiKey) {
+      throw new Error('N8N_API_KEY is required either in stored session, headers, or environment variables');
+    }
+    
+    return {
+      headers: {
+        'X-N8N-API-KEY': apiKey,
+        'Content-Type': 'application/json'
+      }
+    };
+  }
+
+  // Middleware to validate authentication for tool calls
+  validateAuthentication(headers = {}, sessionId = null) {
+    const apiKey = this.getApiKey(sessionId, headers);
+    if (!apiKey) {
+      return {
+        isValid: false,
+        error: {
+          code: -32001,
+          message: 'Authentication required. Please provide N8N_API_KEY in request headers during connection or set it as environment variable.',
+          data: {
+            requiredHeaders: ['N8N-API-KEY', 'N8N_API_KEY', 'n8n-api-key'],
+            bearerToken: 'Authorization: Bearer <your_n8n_api_key>',
+            environmentVariable: 'N8N_API_KEY',
+            sessionSupport: 'Store credentials during initial connection for automatic reuse'
+          }
+        }
+      };
+    }
+    
+    return { isValid: true };
+  }
+
   // Tool implementations
-  async selfTest() {
+  async selfTest(args = {}, headers = {}, sessionId = null) {
     const results = {
       timestamp: new Date().toISOString(),
       tests: [],
@@ -58,43 +143,43 @@ class N8nMcpServer {
     console.log('🧪 Starting comprehensive self-test of all MCP tools...');
 
     // Test 1: Basic n8n API Connection
-    await this.testBasicConnection(results);
+    await this.testBasicConnection(results, headers, sessionId);
 
     // Test 2: list_workflows
-    await this.testListWorkflows(results);
+    await this.testListWorkflows(results, headers, sessionId);
 
     // Test 3: get_workflow (if workflows exist)
-    await this.testGetWorkflow(results);
+    await this.testGetWorkflow(results, headers, sessionId);
 
     // Test 4: list_executions
-    await this.testListExecutions(results);
+    await this.testListExecutions(results, headers, sessionId);
 
     // Test 5: create_workflow
-    await this.testCreateWorkflow(results);
+    await this.testCreateWorkflow(results, headers, sessionId);
 
     // Test 6: update_workflow (if create succeeded)
-    await this.testUpdateWorkflow(results);
+    await this.testUpdateWorkflow(results, headers, sessionId);
 
     // Test 7: activate_workflow (if workflow exists)
-    await this.testActivateWorkflow(results);
+    await this.testActivateWorkflow(results, headers, sessionId);
 
     // Test 8: deactivate_workflow (if workflow exists)
-    await this.testDeactivateWorkflow(results);
+    await this.testDeactivateWorkflow(results, headers, sessionId);
 
     // Test 9: list_credentials
-    await this.testListCredentials(results);
+    await this.testListCredentials(results, headers, sessionId);
 
     // Test 10: create_credential
-    await this.testCreateCredential(results);
+    await this.testCreateCredential(results, headers, sessionId);
 
     // Test 11: delete_workflow
-    await this.testDeleteWorkflow(results);
+    await this.testDeleteWorkflow(results, headers, sessionId);
 
     // Test 12: list_nodes
-    await this.testListNodes(results);
+    await this.testListNodes(results, headers, sessionId);
 
     // Clean up test workflows
-    await this.cleanupTestWorkflows(results);
+    await this.cleanupTestWorkflows(results, headers, sessionId);
 
     const successRate = ((results.summary.passed / results.summary.total) * 100).toFixed(1);
     
@@ -105,10 +190,14 @@ class N8nMcpServer {
     };
   }
 
-  async testBasicConnection(results) {
+  async testBasicConnection(results, headers = {}, sessionId = null) {
     const testName = 'n8n API Connection';
     try {
-      const response = await n8nApi.get('/workflows', { params: { limit: 1 } });
+      const config = this.getAuthenticatedConfig(headers, sessionId);
+      const response = await n8nApi.get('/workflows', { 
+        params: { limit: 1 },
+        ...config
+      });
       results.tests.push({
         name: testName,
         status: 'PASS',
@@ -130,12 +219,12 @@ class N8nMcpServer {
     results.summary.total++;
   }
 
-  async testListWorkflows(results) {
+  async testListWorkflows(results, headers = {}, sessionId = null) {
     const testName = 'list_workflows';
     const testInput = { limit: 3 };
     
     try {
-      const result = await this.listWorkflows(testInput);
+      const result = await this.listWorkflows(testInput, headers, sessionId);
       results.tests.push({
         name: testName,
         status: result.success ? 'PASS' : 'FAIL',
@@ -163,13 +252,13 @@ class N8nMcpServer {
     results.summary.total++;
   }
 
-  async testGetWorkflow(results) {
+  async testGetWorkflow(results, headers = {}, sessionId = null) {
     const testName = 'get_workflow';
     
     // First get a workflow ID to test with
     let testWorkflowId = null;
     try {
-      const workflows = await this.listWorkflows({ limit: 1 });
+      const workflows = await this.listWorkflows({ limit: 1 }, headers, sessionId);
       if (workflows.success && workflows.data && workflows.data.length > 0) {
         testWorkflowId = workflows.data[0].id;
       }
@@ -193,7 +282,7 @@ class N8nMcpServer {
     const testInput = { workflowId: testWorkflowId };
     
     try {
-      const result = await this.getWorkflow(testInput);
+      const result = await this.getWorkflow(testInput, headers, sessionId);
       results.tests.push({
         name: testName,
         status: result.success ? 'PASS' : 'FAIL',
@@ -222,12 +311,12 @@ class N8nMcpServer {
     results.summary.total++;
   }
 
-  async testListExecutions(results) {
+  async testListExecutions(results, headers = {}, sessionId = null) {
     const testName = 'list_executions';
     const testInput = { limit: 2 };
     
     try {
-      const result = await this.listExecutions(testInput);
+      const result = await this.listExecutions(testInput, headers, sessionId);
       results.tests.push({
         name: testName,
         status: result.success ? 'PASS' : 'FAIL',
@@ -255,7 +344,7 @@ class N8nMcpServer {
     results.summary.total++;
   }
 
-  async testCreateWorkflow(results) {
+  async testCreateWorkflow(results, headers = {}, sessionId = null) {
     const testName = 'create_workflow';
     const testInput = {
       name: 'Self-Test Workflow',
@@ -274,7 +363,7 @@ class N8nMcpServer {
     };
     
     try {
-      const result = await this.createWorkflow(testInput);
+      const result = await this.createWorkflow(testInput, headers, sessionId);
       
       // Store workflow ID for cleanup and update test
       if (result.success && result.data?.id) {
@@ -698,7 +787,8 @@ class N8nMcpServer {
     
     for (const workflowId of results.testWorkflowIds) {
       try {
-        await n8nApi.delete(`/workflows/${workflowId}`);
+        const config = this.getAuthenticatedConfig(headers);
+        await n8nApi.delete(`/workflows/${workflowId}`, config);
         console.log(`✅ Deleted test workflow: ${workflowId}`);
       } catch (error) {
         console.log(`⚠️ Failed to delete test workflow ${workflowId}: ${error.message}`);
@@ -706,10 +796,14 @@ class N8nMcpServer {
     }
   }
 
-  async listWorkflows(args = {}) {
+  async listWorkflows(args = {}, headers = {}, sessionId = null) {
     try {
       const { limit = 50 } = args;
-      const response = await n8nApi.get('/workflows', { params: { limit } });
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.get('/workflows', { 
+          params: { limit },
+          ...config
+        });
       return {
         success: true,
         data: response.data.data,
@@ -728,14 +822,15 @@ class N8nMcpServer {
     }
   }
 
-  async getWorkflow(args) {
+  async getWorkflow(args, headers = {}, sessionId = null) {
     try {
       const { workflowId } = args;
       if (!workflowId) {
         throw new Error('workflowId is required');
       }
       
-      const response = await n8nApi.get(`/workflows/${workflowId}`);
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.get(`/workflows/${workflowId}`, config);
       
       if (response.data && response.data.data) {
         return {
@@ -763,10 +858,14 @@ class N8nMcpServer {
     }
   }
 
-  async listExecutions(args = {}) {
+  async listExecutions(args = {}, headers = {}, sessionId = null) {
     try {
       const { limit = 10 } = args;
-      const response = await n8nApi.get('/executions', { params: { limit } });
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.get('/executions', { 
+          params: { limit },
+          ...config
+        });
       return {
         success: true,
         data: response.data.data,
@@ -784,7 +883,7 @@ class N8nMcpServer {
     }
   }
 
-  async createWorkflow(args) {
+  async createWorkflow(args, headers = {}, sessionId = null) {
     try {
       const { name, nodes, connections = {}, settings = {} } = args;
       
@@ -810,7 +909,8 @@ class N8nMcpServer {
         settings
       };
       
-      const response = await n8nApi.post('/workflows', workflowData);
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.post('/workflows', workflowData, config);
       return {
         success: true,
         data: response.data,
@@ -828,7 +928,7 @@ class N8nMcpServer {
     }
   }
 
-  async updateWorkflow(args) {
+  async updateWorkflow(args, headers = {}, sessionId = null) {
     try {
       const { workflowId, ...updates } = args;
       
@@ -836,8 +936,9 @@ class N8nMcpServer {
         throw new Error('workflowId is required');
       }
       
-      // Get the current workflow first to preserve its structure
-      const currentResponse = await n8nApi.get(`/workflows/${workflowId}`);
+              // Get the current workflow first to preserve its structure
+        const config = this.getAuthenticatedConfig(headers, sessionId);
+        const currentResponse = await n8nApi.get(`/workflows/${workflowId}`, config);
       const currentWorkflow = currentResponse.data;
       
       // Merge updates with current workflow, excluding read-only fields
@@ -864,7 +965,7 @@ class N8nMcpServer {
         }
       }
       
-      const response = await n8nApi.put(`/workflows/${workflowId}`, workflowData);
+      const response = await n8nApi.put(`/workflows/${workflowId}`, workflowData, config);
       return {
         success: true,
         data: response.data,
@@ -882,7 +983,7 @@ class N8nMcpServer {
     }
   }
 
-  async activateWorkflow(args) {
+  async activateWorkflow(args, headers = {}, sessionId = null) {
     try {
       const { workflowId } = args;
       
@@ -890,8 +991,9 @@ class N8nMcpServer {
         throw new Error('workflowId is required');
       }
       
-      // Use POST to /workflows/{id}/activate endpoint
-      const response = await n8nApi.post(`/workflows/${workflowId}/activate`);
+              // Use POST to /workflows/{id}/activate endpoint
+        const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.post(`/workflows/${workflowId}/activate`, {}, config);
       return {
         success: true,
         data: response.data.data || { id: workflowId, active: true },
@@ -903,9 +1005,10 @@ class N8nMcpServer {
       if (error.response?.status === 404) {
         try {
           // Get the workflow first to preserve its structure
-          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`);
+          const config = this.getAuthenticatedConfig(headers);
+          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`, config);
           const workflowData = { ...getResponse.data.data, active: true };
-          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData);
+          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData, config);
           return {
             success: true,
             data: updateResponse.data.data,
@@ -929,7 +1032,7 @@ class N8nMcpServer {
     }
   }
 
-  async deactivateWorkflow(args) {
+  async deactivateWorkflow(args, headers = {}, sessionId = null) {
     try {
       const { workflowId } = args;
       
@@ -937,8 +1040,9 @@ class N8nMcpServer {
         throw new Error('workflowId is required');
       }
       
-      // Use POST to /workflows/{id}/deactivate endpoint
-      const response = await n8nApi.post(`/workflows/${workflowId}/deactivate`);
+              // Use POST to /workflows/{id}/deactivate endpoint
+        const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.post(`/workflows/${workflowId}/deactivate`, {}, config);
       return {
         success: true,
         data: response.data.data || { id: workflowId, active: false },
@@ -950,9 +1054,10 @@ class N8nMcpServer {
       if (error.response?.status === 404) {
         try {
           // Get the workflow first to preserve its structure
-          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`);
+          const config = this.getAuthenticatedConfig(headers);
+          const getResponse = await n8nApi.get(`/workflows/${args.workflowId}`, config);
           const workflowData = { ...getResponse.data.data, active: false };
-          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData);
+          const updateResponse = await n8nApi.put(`/workflows/${args.workflowId}`, workflowData, config);
           return {
             success: true,
             data: updateResponse.data.data,
@@ -976,10 +1081,14 @@ class N8nMcpServer {
     }
   }
 
-  async listCredentials(args) {
+  async listCredentials(args, headers = {}, sessionId = null) {
     try {
       const { limit = 50 } = args;
-      const response = await n8nApi.get('/credentials', { params: { limit } });
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.get('/credentials', { 
+          params: { limit },
+          ...config
+        });
       return {
         success: true,
         data: response.data.data,
@@ -1007,7 +1116,7 @@ class N8nMcpServer {
     }
   }
 
-  async createCredential(args) {
+  async createCredential(args, headers = {}, sessionId = null) {
     try {
       const { name, type, data } = args;
       
@@ -1015,8 +1124,9 @@ class N8nMcpServer {
         throw new Error('Name and type are required');
       }
       
-      const credentialData = { name, type, data };
-      const response = await n8nApi.post('/credentials', credentialData);
+              const credentialData = { name, type, data };
+        const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await n8nApi.post('/credentials', credentialData, config);
       return {
         success: true,
         data: response.data.data,
@@ -1044,25 +1154,37 @@ class N8nMcpServer {
   }
 
   // Handle JSON-RPC messages
-  async handleMessage(message) {
+  async handleMessage(message, headers = {}) {
     try {
       console.log(`📥 Received MCP request: ${message.method || 'unknown'}`);
       
-      // Handle initialization
+      // Handle initialization (store credentials if provided)
       if (message.method === 'initialize') {
         this.initialized = true;
+        
+        // Store client credentials if provided in headers
+        const sessionId = this.storeClientCredentials(headers);
+        
+        const result = {
+          protocolVersion: '2024-11-05',
+          capabilities: {
+            tools: {}
+          },
+          serverInfo: {
+            name: 'n8n-mcp-server',
+            version: '1.0.0'
+          }
+        };
+        
+        // Include session info if credentials were stored
+        if (sessionId) {
+          result.serverInfo.sessionId = sessionId;
+          result.serverInfo.authenticationStored = true;
+        }
+        
         return {
           jsonrpc: '2.0',
-          result: {
-            protocolVersion: '2024-11-05',
-            capabilities: {
-              tools: {}
-            },
-            serverInfo: {
-              name: 'n8n-mcp-server',
-              version: '1.0.0'
-            }
-          },
+          result,
           id: message.id
         };
       }
@@ -1270,45 +1392,58 @@ class N8nMcpServer {
       
       // Handle tools/call
       if (message.method === 'tools/call') {
+        // Extract session ID if provided by client
+        const sessionId = message.params?.sessionId || headers['x-session-id'] || null;
+        
+        // Validate authentication for tool calls (check session first, then headers)
+        const authResult = this.validateAuthentication(headers, sessionId);
+        if (!authResult.isValid) {
+          return {
+            jsonrpc: '2.0',
+            error: authResult.error,
+            id: message.id
+          };
+        }
+        
         const { name, arguments: args } = message.params;
         
         let result;
         switch (name) {
           case 'self_test':
-            result = await this.selfTest(args);
+            result = await this.selfTest(args, headers, sessionId);
             break;
           case 'list_workflows':
-            result = await this.listWorkflows(args);
+            result = await this.listWorkflows(args, headers, sessionId);
             break;
           case 'get_workflow':
-            result = await this.getWorkflow(args);
+            result = await this.getWorkflow(args, headers, sessionId);
             break;
           case 'list_executions':
-            result = await this.listExecutions(args);
+            result = await this.listExecutions(args, headers, sessionId);
             break;
           case 'create_workflow':
-            result = await this.createWorkflow(args);
+            result = await this.createWorkflow(args, headers, sessionId);
             break;
           case 'update_workflow':
-            result = await this.updateWorkflow(args);
+            result = await this.updateWorkflow(args, headers, sessionId);
             break;
           case 'activate_workflow':
-            result = await this.activateWorkflow(args);
+            result = await this.activateWorkflow(args, headers, sessionId);
             break;
           case 'deactivate_workflow':
-            result = await this.deactivateWorkflow(args);
+            result = await this.deactivateWorkflow(args, headers, sessionId);
             break;
           case 'list_credentials':
-            result = await this.listCredentials(args);
+            result = await this.listCredentials(args, headers, sessionId);
             break;
           case 'create_credential':
-            result = await this.createCredential(args);
+            result = await this.createCredential(args, headers, sessionId);
             break;
           case 'delete_workflow':
-            result = await this.deleteWorkflow(args.workflowId);
+            result = await this.deleteWorkflow(args.workflowId, headers, sessionId);
             break;
           case 'list_nodes':
-            result = await this.listNodes();
+            result = await this.listNodes(headers, sessionId);
             break;
           default:
             throw new Error(`Unknown tool: ${name}`);
@@ -1366,7 +1501,7 @@ class N8nMcpServer {
       // Enable CORS
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, Accept');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, Accept, N8N-API-KEY, N8N_API_KEY, Authorization');
       
       // Handle CORS preflight
       if (req.method === 'OPTIONS') {
@@ -1408,8 +1543,8 @@ class N8nMcpServer {
               const acceptHeader = req.headers.accept || '';
               const supportsSSE = acceptHeader.includes('text/event-stream');
               
-              // Handle the message
-              const response = await this.handleMessage(message);
+              // Handle the message with headers
+              const response = await this.handleMessage(message, req.headers);
               
               // Don't send response for notifications
               if (response === null) {
@@ -1493,6 +1628,19 @@ class N8nMcpServer {
       console.log(`❤️  Health check: http://localhost:${MCP_PORT}/health`);
       console.log(`🔗 n8n connection: ${N8N_BASE_URL}`);
       console.log(`✨ Ready for MCP Inspector!`);
+      
+      // Show authentication status
+      if (hasEnvApiKey) {
+        console.log(`🔐 Authentication: Using N8N_API_KEY from environment`);
+      } else {
+        console.log(`🔐 Authentication: N8N_API_KEY not found in environment`);
+        console.log(`💡 To authenticate, include N8N_API_KEY in your request headers:`);
+        console.log(`   - Header: "N8N-API-KEY: your_api_key_here"`);
+        console.log(`   - Header: "N8N_API_KEY: your_api_key_here"`);
+        console.log(`   - Header: "n8n-api-key: your_api_key_here"`);
+        console.log(`   - Header: "Authorization: Bearer your_api_key_here"`);
+      }
+      
       console.log(`\n🔍 Use MCP Inspector:`);
       console.log(`   Transport: Streamable HTTP`);
       console.log(`   URL: http://localhost:${MCP_PORT}/mcp`);
@@ -1507,7 +1655,7 @@ class N8nMcpServer {
   }
 
   // Delete workflow method
-  async deleteWorkflow(workflowId) {
+  async deleteWorkflow(workflowId, headers = {}, sessionId = null) {
     try {
       if (!workflowId) {
         throw new Error('Workflow ID is required');
@@ -1515,12 +1663,8 @@ class N8nMcpServer {
 
       console.log(`[DEBUG] Deleting workflow with ID: ${workflowId}`);
 
-      const response = await axios.delete(`${N8N_BASE_URL}/api/v1/workflows/${workflowId}`, {
-        headers: {
-          'X-N8N-API-KEY': N8N_API_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await axios.delete(`${N8N_BASE_URL}/api/v1/workflows/${workflowId}`, config);
 
       console.log(`[DEBUG] Delete workflow response:`, response.status, response.data);
 
@@ -1541,16 +1685,12 @@ class N8nMcpServer {
   }
 
   // List available node types method
-  async listNodes() {
+  async listNodes(headers = {}, sessionId = null) {
     try {
       console.log(`[DEBUG] Fetching available node types from n8n`);
 
-      const response = await axios.get(`${N8N_BASE_URL}/types/nodes.json`, {
-        headers: {
-          'X-N8N-API-KEY': N8N_API_KEY,
-          'Content-Type': 'application/json'
-        }
-      });
+              const config = this.getAuthenticatedConfig(headers, sessionId);
+        const response = await axios.get(`${N8N_BASE_URL}/types/nodes.json`, config);
 
       console.log(`[DEBUG] List nodes response status:`, response.status);
       
