@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  n8n-mcp-server:
+    build: .
+    container_name: n8n-mcp-server
+    restart: unless-stopped
+    
+    # Environment variables from .env file
+    env_file:
+      - .env
+    
+    # Override specific environment variables if needed
+    environment:
+      - MCP_PORT=3001
+    
+    # Port mapping
+    ports:
+      - "${MCP_PORT:-3001}:3001"
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Labels for better organization
+    labels:
+      - "com.docker.compose.project=n8n-mcp-bridge"
+      - "com.docker.compose.service=mcp-server"
+      - "description=n8n MCP Server for AI Agents"
+
+# Optional: Create a network for better isolation
+networks:
+  default:
+    name: n8n-mcp-network
+    driver: bridge 

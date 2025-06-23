@@ -50,7 +50,7 @@ A comprehensive **Model Context Protocol (MCP) server** that provides AI assista
 1. **Clone the repository**
    ```bash
    git clone <repository-url>
-   cd n8n-ai-bridge
+   cd n8n-mcp
    ```
 
 2. **Install dependencies**
@@ -94,7 +94,7 @@ node index.js
     "n8n": {
       "command": "node",
       "args": ["index.js"],
-      "cwd": "/path/to/n8n-ai-bridge",
+      "cwd": "/path/to/n8n-mcp",
       "env": {
         "N8N_API_KEY": "your-n8n-api-key-here",
         "N8N_BASE_URL": "http://localhost:5678"
