@@ -1,0 +1,19 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- When update or create something, always think about solutions for testing to make sure generated code working well
+- MCP server must support sse
+- using `mcp-remote` and `mcp-remote-client` to test mcp server and list tools before confirm that new changes working
+```example
+npx -p mcp-remote mcp-remote-client http://localhost:3001/mcp
+```
+- Must write down connect instruction when server start
+- Using docs from https://modelcontextprotocol.io/docs/concepts/transports to implement mcp server
+- make sure we do not leak any sensitive env to files that not in .gitignore
+- Always using index.js as entrypoint
+- All tools must have an inputSchema property
+- When testing locally, need to check if .env have needed env or not, it not need to use Authorization header to authorize request to mcp server.
+- Each tools/Api should be splited into a separated file
+- Each API call to n8n should have a unit test

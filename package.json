@@ -8,6 +8,11 @@
         "start": "node index.js",
         "health": "curl -s http://localhost:3001/health | jq",
         "dev": "DEBUG=1 node index.js",
+        "test": "node --experimental-vm-modules node_modules/.bin/jest",
+        "test:watch": "node --experimental-vm-modules node_modules/.bin/jest --watch",
+        "test:coverage": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
+        "test:tools": "node --experimental-vm-modules node_modules/.bin/jest tests/tools",
+        "test:services": "node --experimental-vm-modules node_modules/.bin/jest tests/services",
         "docker:build": "docker build -t n8n-mcp-server .",
         "docker:run": "docker run -d --name n8n-mcp-server -p 3001:3001 --env-file .env n8n-mcp-server",
         "docker:stop": "docker stop n8n-mcp-server && docker rm n8n-mcp-server",
@@ -40,5 +45,10 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/sonnd08/n8n-mcp"
+    },
+    "devDependencies": {
+        "@types/jest": "^30.0.0",
+        "jest": "^30.0.2",
+        "nock": "^14.0.5"
     }
 }
