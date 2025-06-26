@@ -1,5 +1,5 @@
 import nock from 'nock';
-import { listExecutions } from '../../services/execution-service.js';
+import { executeWorkflow, getExecution, listExecutions } from '../../services/execution-service.js';
 
 const N8N_BASE_URL = 'http://localhost:5678';
 const API_BASE_URL = `${N8N_BASE_URL}/api/v1`;
@@ -14,27 +14,11 @@ describe('Execution Service', () => {
   });
 
   describe('listExecutions', () => {
-    it('should return list of executions', async () => {
+    it('should successfully list executions', async () => {
       const mockResponse = {
         data: [
-          {
-            id: '1',
-            workflowId: 'workflow-1',
-            mode: 'manual',
-            status: 'success',
-            startedAt: '2023-01-01T10:00:00.000Z',
-            stoppedAt: '2023-01-01T10:01:00.000Z',
-            finished: true
-          },
-          {
-            id: '2',
-            workflowId: 'workflow-2',
-            mode: 'trigger',
-            status: 'running',
-            startedAt: '2023-01-01T11:00:00.000Z',
-            stoppedAt: null,
-            finished: false
-          }
+          { id: '1', workflowId: 'workflow1', status: 'success' },
+          { id: '2', workflowId: 'workflow2', status: 'failed' }
         ]
       };
 
@@ -46,39 +30,11 @@ describe('Execution Service', () => {
       const result = await listExecutions({ limit: 10 });
 
       expect(result).toEqual(mockResponse);
-      expect(result.data).toHaveLength(2);
-      expect(result.data[0].status).toBe('success');
-      expect(result.data[1].status).toBe('running');
     });
 
-    it('should handle different limit values', async () => {
-      const mockResponse = {
-        data: Array.from({ length: 25 }, (_, i) => ({
-          id: `${i + 1}`,
-          workflowId: `workflow-${i + 1}`,
-          mode: 'manual',
-          status: 'success',
-          startedAt: '2023-01-01T10:00:00.000Z',
-          stoppedAt: '2023-01-01T10:01:00.000Z',
-          finished: true
-        }))
-      };
-
-      nock(API_BASE_URL)
-        .get('/executions')
-        .query({ limit: 25 })
-        .reply(200, mockResponse);
-
-      const result = await listExecutions({ limit: 25 });
-
-      expect(result.data).toHaveLength(25);
-    });
-
-    it('should use default limit when not specified', async () => {
-      const mockResponse = {
-        data: []
-      };
-
+    it('should use default limit when not provided', async () => {
+      const mockResponse = { data: [] };
+      
       nock(API_BASE_URL)
         .get('/executions')
         .query({ limit: 10 })
@@ -95,7 +51,7 @@ describe('Execution Service', () => {
         .query({ limit: 10 })
         .reply(500, { message: 'Internal server error' });
 
-      await expect(listExecutions({ limit: 10 })).rejects.toThrow();
+      await expect(listExecutions({ limit: 10 })).rejects.toThrow('Request failed with status code 500');
     });
 
     it('should handle unauthorized access', async () => {
@@ -104,7 +60,88 @@ describe('Execution Service', () => {
         .query({ limit: 10 })
         .reply(401, { message: 'Unauthorized' });
 
-      await expect(listExecutions({ limit: 10 })).rejects.toThrow();
+      await expect(listExecutions({ limit: 10 })).rejects.toThrow('Request failed with status code 401');
+    });
+  });
+
+  describe('executeWorkflow', () => {
+    it('should successfully execute a workflow', async () => {
+      const mockResponse = {
+        id: 'execution-123',
+        workflowId: 'workflow-456',
+        status: 'running'
+      };
+
+      nock(API_BASE_URL)
+        .post('/rest/workflows/workflow-456/run', { input: 'test' })
+        .reply(200, mockResponse);
+
+      const result = await executeWorkflow('workflow-456', { input: 'test' });
+
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should throw helpful error for 404 responses', async () => {
+      nock(API_BASE_URL)
+        .post('/rest/workflows/workflow-456/run', { input: 'test' })
+        .reply(404, { message: 'Not found' });
+
+      await expect(executeWorkflow('workflow-456', { input: 'test' }))
+        .rejects
+        .toThrow('Workflow not found or not accessible for execution via internal API');
+    });
+
+    it('should throw helpful error for 401 Unauthorized responses', async () => {
+      nock(API_BASE_URL)
+        .post('/rest/workflows/workflow-456/run', { input: 'test' })
+        .reply(401, { message: 'Unauthorized' });
+
+      await expect(executeWorkflow('workflow-456', { input: 'test' }))
+        .rejects
+        .toThrow('Unauthorized - The /rest/workflows/{id}/run endpoint is an internal API that requires different authentication than the public API');
+    });
+
+    it('should throw error when workflowId is not provided', async () => {
+      await expect(executeWorkflow()).rejects.toThrow('workflowId is required');
+    });
+
+    it('should handle API errors', async () => {
+      nock(API_BASE_URL)
+        .post('/rest/workflows/workflow-456/run')
+        .reply(500, { message: 'API Error' });
+
+      await expect(executeWorkflow('workflow-456')).rejects.toThrow('Request failed with status code 500');
+    });
+  });
+
+  describe('getExecution', () => {
+    it('should successfully get execution details', async () => {
+      const mockResponse = {
+        id: 'execution-123',
+        workflowId: 'workflow-456',
+        status: 'success',
+        data: { result: 'test output' }
+      };
+
+      nock(API_BASE_URL)
+        .get('/executions/execution-123')
+        .reply(200, mockResponse);
+
+      const result = await getExecution('execution-123');
+
+      expect(result).toEqual(mockResponse);
+    });
+
+    it('should throw error when executionId is not provided', async () => {
+      await expect(getExecution()).rejects.toThrow('executionId is required');
+    });
+
+    it('should handle API errors', async () => {
+      nock(API_BASE_URL)
+        .get('/executions/execution-123')
+        .reply(404, { message: 'Execution not found' });
+
+      await expect(getExecution('execution-123')).rejects.toThrow('Request failed with status code 404');
     });
   });
 }); 

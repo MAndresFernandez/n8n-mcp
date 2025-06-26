@@ -8,14 +8,13 @@ import {
   updateWorkflow,
   deleteWorkflow
 } from '../../tools/workflow-tools.js';
-
 const N8N_BASE_URL = 'http://localhost:5678';
 const API_BASE_URL = `${N8N_BASE_URL}/api/v1`;
 
-describe('Workflow Tools', () => {
-  beforeEach(() => {
-    nock.cleanAll();
-  });
+  describe('Workflow Tools', () => {
+    beforeEach(() => {
+      nock.cleanAll();
+    });
 
   afterEach(() => {
     nock.cleanAll();

@@ -9,7 +9,7 @@ import {
   deactivateWorkflow,
   deleteWorkflow
 } from './workflow-tools.js';
-import { listExecutions } from './execution-tools.js';
+import { listExecutions, executeWorkflow, getExecution } from './execution-tools.js';
 import { listCredentials, createCredential } from './credential-tools.js';
 import { listNodes } from './node-tools.js';
 
@@ -19,6 +19,8 @@ const toolHandlers = {
   'list_workflows': listWorkflows,
   'get_workflow': getWorkflow,
   'list_executions': listExecutions,
+  'execute_workflow': executeWorkflow,
+  'get_execution': getExecution,
   'create_workflow': createWorkflow,
   'update_workflow': updateWorkflow,
   'activate_workflow': activateWorkflow,

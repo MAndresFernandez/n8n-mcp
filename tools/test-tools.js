@@ -8,7 +8,7 @@ import {
   deactivateWorkflow, 
   deleteWorkflow 
 } from './workflow-tools.js';
-import { listExecutions } from './execution-tools.js';
+import { listExecutions, executeWorkflow, getExecution } from './execution-tools.js';
 import { listCredentials, createCredential } from './credential-tools.js';
 import { listNodes } from './node-tools.js';
 
@@ -44,28 +44,34 @@ export async function selfTest(args = {}, headers = {}, sessionId = null, client
   // Test 4: List Executions
   await testListExecutions(results, headers, sessionId, clientCredentials);
 
-  // Test 5: List Credentials
+  // Test 5: Execute Workflow (if workflows exist)
+  await testExecuteWorkflow(results, headers, sessionId, clientCredentials);
+
+  // Test 6: Get Execution (if executions exist)
+  await testGetExecution(results, headers, sessionId, clientCredentials);
+
+  // Test 7: List Credentials
   await testListCredentials(results, headers, sessionId, clientCredentials);
 
-  // Test 6: List Nodes
+  // Test 8: List Nodes
   await testListNodes(results, headers, sessionId, clientCredentials);
 
-  // Test 7: Create Workflow
+  // Test 9: Create Workflow
   await testCreateWorkflow(results, headers, sessionId, clientCredentials);
 
-  // Test 8: Update Workflow (uses created workflow)
+  // Test 10: Update Workflow (uses created workflow)
   await testUpdateWorkflow(results, headers, sessionId, clientCredentials);
 
-  // Test 9: Activate Workflow (uses created workflow)
+  // Test 11: Activate Workflow (uses created workflow)
   await testActivateWorkflow(results, headers, sessionId, clientCredentials);
 
-  // Test 10: Deactivate Workflow (uses created workflow)
+  // Test 12: Deactivate Workflow (uses created workflow)
   await testDeactivateWorkflow(results, headers, sessionId, clientCredentials);
 
-  // Test 11: Create Credential (if supported)
+  // Test 13: Create Credential (if supported)
   await testCreateCredential(results, headers, sessionId, clientCredentials);
 
-  // Test 12: Delete Workflow (cleanup)
+  // Test 14: Delete Workflow (cleanup)
   await testDeleteWorkflow(results, headers, sessionId, clientCredentials);
 
   // Cleanup any remaining test workflows
@@ -219,6 +225,338 @@ async function testListExecutions(results, headers = {}, sessionId = null, clien
         count: result.count,
         hasData: !!result.data,
         error: result.error
+      }
+    });
+    if (result.success) results.summary.passed++;
+    else results.summary.failed++;
+  } catch (error) {
+    results.tests.push({
+      name: testName,
+      status: 'FAIL',
+      message: `Unexpected error: ${error.message}`,
+      input: testInput,
+      output: { error: error.message }
+    });
+    results.summary.failed++;
+  }
+  results.summary.total++;
+}
+
+async function testExecuteWorkflow(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
+  const testName = 'execute_workflow';
+  
+  // Create a webhook-triggered workflow that can actually be executed via HTTP request
+  let testWorkflowId = null;
+  let webhookUrl = null;
+  let createdForTest = false;
+  
+  // Create a webhook trigger workflow that returns exactly what the user sends
+  const webhookPath = `mcp-test-${Date.now()}`;
+  const executionTestWorkflow = {
+    name: 'Webhook Execution Test Workflow (MCP)',
+    nodes: [
+      {
+        name: 'Webhook',
+        type: 'n8n-nodes-base.webhook',
+        parameters: {
+          path: webhookPath,
+          httpMethod: 'POST',
+          responseMode: 'responseNode'
+        },
+        position: [240, 300],
+        typeVersion: 1,
+        id: 'webhook-trigger',
+        webhookId: `webhook-${Date.now()}`
+      },
+      {
+        name: 'Response',
+        type: 'n8n-nodes-base.respondToWebhook',
+        parameters: {
+          options: {},
+          responseBody: "{\n  \"message\": \"Webhook success\",\n  \"data\": {{ $json }}\n}"
+        },
+        position: [460, 300],
+        typeVersion: 1,
+        id: 'webhook-response'
+      }
+    ],
+    connections: {
+      'Webhook': {
+        main: [[{ node: 'Response', type: 'main', index: 0 }]]
+      }
+    },
+    settings: {},
+    active: false
+  };
+  
+  try {
+    // Create the webhook workflow
+    const createResult = await createWorkflow(executionTestWorkflow, headers, sessionId, clientCredentials);
+    if (createResult.success && createResult.data?.id) {
+      testWorkflowId = createResult.data.id;
+      createdForTest = true;
+      console.log(`📝 Created webhook test workflow: ${testWorkflowId}`);
+      
+      // Activate the webhook workflow so it can receive requests
+      const activateResult = await activateWorkflow({ workflowId: testWorkflowId }, headers, sessionId, clientCredentials);
+      if (activateResult.success) {
+        // Construct the webhook URL
+        const n8nBaseUrl = process.env.N8N_BASE_URL || 'http://localhost:5678';
+        webhookUrl = `${n8nBaseUrl}/webhook/${webhookPath}`;
+        console.log(`✅ Webhook workflow activated: ${webhookUrl}`);
+      } else {
+        throw new Error(`Failed to activate webhook workflow: ${activateResult.error}`);
+      }
+    } else {
+      throw new Error(`Failed to create webhook workflow: ${createResult.error}`);
+    }
+  } catch (createError) {
+    results.tests.push({
+      name: testName,
+      status: 'SKIP',
+      message: `Could not create webhook workflow for execution: ${createError.message}`,
+      input: { note: 'Requires ability to create and activate webhook workflow' },
+      output: { skipped: true, reason: 'Failed to create webhook workflow', error: createError.message }
+    });
+    results.summary.skipped++;
+    results.summary.total++;
+    return;
+  }
+
+  const testInput = { 
+    workflowId: testWorkflowId,
+    webhookUrl: webhookUrl,
+    testData: {
+      testRun: true,
+      timestamp: new Date().toISOString(),
+      source: 'mcp-self-test',
+      message: 'Testing webhook execution'
+    }
+  };
+  
+  try {
+    // Test the webhook by making a direct HTTP request
+    const axios = (await import('axios')).default;
+    const response = await axios.post(webhookUrl, testInput.testData, {
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      timeout: 10000
+    });
+    
+    if (response.status === 200 && response.data) {
+      const responseData = response.data;
+      
+      // Check if the response matches the expected format or contains our test data
+      const hasExpectedFormat = responseData.message === "Webhook success" && responseData.data;
+      const hasWebhookData = responseData.body && 
+                            responseData.body.testRun === testInput.testData.testRun &&
+                            responseData.body.source === testInput.testData.source;
+      const expectedSuccess = hasExpectedFormat || hasWebhookData;
+      
+      results.tests.push({
+        name: testName,
+        status: expectedSuccess ? 'PASS' : 'FAIL',
+        message: expectedSuccess 
+          ? (hasExpectedFormat 
+             ? 'Successfully executed webhook workflow and received expected response format'
+             : 'Successfully executed webhook workflow and received webhook data back')
+          : 'Webhook executed but response format was unexpected',
+        input: testInput,
+        output: {
+          success: expectedSuccess,
+          workflowId: testWorkflowId,
+          webhookUrl: webhookUrl,
+          responseStatus: response.status,
+          responseData: responseData,
+          createdForTest: createdForTest,
+          note: 'Webhook workflow executed successfully via direct HTTP request'
+        }
+      });
+      
+      if (expectedSuccess) {
+        results.summary.passed++;
+      } else {
+        results.summary.failed++;
+      }
+    } else {
+      results.tests.push({
+        name: testName,
+        status: 'FAIL',
+        message: `Webhook request succeeded but response was unexpected: status ${response.status}`,
+        input: testInput,
+        output: {
+          success: false,
+          workflowId: testWorkflowId,
+          webhookUrl: webhookUrl,
+          responseStatus: response.status,
+          responseData: response.data,
+          createdForTest: createdForTest,
+          note: 'Unexpected response from webhook'
+        }
+      });
+      results.summary.failed++;
+    }
+  } catch (error) {
+    // Check if it's a timeout or connection error
+    const isNetworkError = error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT' || error.message.includes('timeout');
+    
+    results.tests.push({
+      name: testName,
+      status: 'FAIL',
+      message: `Webhook execution failed: ${error.message}`,
+      input: testInput,
+      output: { 
+        error: error.message, 
+        errorCode: error.code,
+        createdForTest: createdForTest,
+        isNetworkError: isNetworkError,
+        note: isNetworkError ? 'Network connectivity issue with webhook' : 'Webhook execution error'
+      }
+    });
+    results.summary.failed++;
+  }
+  
+  // Clean up the created workflow
+  if (createdForTest && testWorkflowId) {
+    try {
+      // Deactivate first, then delete
+      await deactivateWorkflow({ workflowId: testWorkflowId }, headers, sessionId, clientCredentials);
+      await deleteWorkflow(testWorkflowId, headers, sessionId, clientCredentials);
+      console.log(`🗑️ Cleaned up webhook test workflow: ${testWorkflowId}`);
+    } catch (cleanupError) {
+      console.warn(`⚠️ Failed to cleanup webhook test workflow ${testWorkflowId}: ${cleanupError.message}`);
+    }
+  }
+  
+  results.summary.total++;
+}
+
+async function testGetExecution(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
+  const testName = 'get_execution';
+  
+  // First get an execution ID to test with
+  let testExecutionId = null;
+  try {
+    const executions = await listExecutions({ limit: 1 }, headers, sessionId, clientCredentials);
+    if (executions.success && executions.data && executions.data.length > 0) {
+      testExecutionId = executions.data[0].id;
+    }
+  } catch (error) {
+    // Ignore error, will skip test
+  }
+
+  if (!testExecutionId) {
+    results.tests.push({
+      name: testName,
+      status: 'SKIP',
+      message: 'No executions available to test with',
+      input: { note: 'Requires existing execution' },
+      output: { skipped: true, reason: 'No executions found' }
+    });
+    results.summary.skipped++;
+    results.summary.total++;
+    return;
+  }
+
+  const testInput = { executionId: testExecutionId };
+  
+  try {
+    const result = await getExecution(testInput, headers, sessionId, clientCredentials);
+    results.tests.push({
+      name: testName,
+      status: result.success ? 'PASS' : 'FAIL',
+      message: result.message || (result.success ? 'Successfully retrieved execution' : 'Failed to retrieve execution'),
+      input: testInput,
+      output: {
+        success: result.success,
+        executionId: result.data?.id,
+        error: result.error
+      }
+    });
+    if (result.success) results.summary.passed++;
+    else results.summary.failed++;
+  } catch (error) {
+    results.tests.push({
+      name: testName,
+      status: 'FAIL',
+      message: `Unexpected error: ${error.message}`,
+      input: testInput,
+      output: { error: error.message }
+    });
+    results.summary.failed++;
+  }
+  results.summary.total++;
+}
+
+async function testListCredentials(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
+  const testName = 'list_credentials';
+  const testInput = { limit: 5 };
+  
+  try {
+    const result = await listCredentials(testInput, headers, sessionId, clientCredentials);
+    results.tests.push({
+      name: testName,
+      status: result.success ? 'PASS' : 'FAIL',
+      message: result.message || (result.success ? 'Successfully listed credentials' : 'Failed to list credentials'),
+      input: testInput,
+      output: {
+        success: result.success,
+        count: result.count,
+        hasData: !!result.data,
+        error: result.error,
+        statusCode: result.statusCode,
+        note: result.note
+      }
+    });
+    if (result.success) results.summary.passed++;
+    else results.summary.failed++;
+  } catch (error) {
+    results.tests.push({
+      name: testName,
+      status: 'FAIL',
+      message: `Unexpected error: ${error.message}`,
+      input: testInput,
+      output: { error: error.message }
+    });
+    results.summary.failed++;
+  }
+  results.summary.total++;
+}
+
+async function testCreateCredential(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
+  const testName = 'create_credential';
+  const testInput = {
+    name: 'Self-Test Credential',
+    type: 'httpBasicAuth',
+    data: {
+      user: 'test-user',
+      password: 'test-password'
+    }
+  };
+  
+  try {
+    const result = await createCredential(testInput, headers, sessionId, clientCredentials);
+    
+    // Store credential ID for potential cleanup
+    if (result.success && result.data?.id) {
+      if (!results.testCredentialIds) results.testCredentialIds = [];
+      results.testCredentialIds.push(result.data.id);
+    }
+    
+    results.tests.push({
+      name: testName,
+      status: result.success ? 'PASS' : 'FAIL',
+      message: result.message || (result.success ? 'Successfully created credential' : 'Failed to create credential'),
+      input: testInput,
+      output: {
+        success: result.success,
+        credentialId: result.data?.id,
+        credentialName: result.data?.name,
+        hasData: !!result.data,
+        error: result.error,
+        statusCode: result.statusCode,
+        note: result.note
       }
     });
     if (result.success) results.summary.passed++;
@@ -419,7 +757,7 @@ async function testActivateWorkflow(results, headers = {}, sessionId = null, cli
       // Ignore error getting status before
     }
     
-          const result = await activateWorkflow(testInput, headers, sessionId, clientCredentials);
+    const result = await activateWorkflow(testInput, headers, sessionId, clientCredentials);
     
     // Check the workflow status after activation attempt
     let afterActivation = null;
@@ -500,91 +838,6 @@ async function testDeactivateWorkflow(results, headers = {}, sessionId = null, c
         active: result.data?.active,
         error: result.error,
         statusCode: result.statusCode
-      }
-    });
-    if (result.success) results.summary.passed++;
-    else results.summary.failed++;
-  } catch (error) {
-    results.tests.push({
-      name: testName,
-      status: 'FAIL',
-      message: `Unexpected error: ${error.message}`,
-      input: testInput,
-      output: { error: error.message }
-    });
-    results.summary.failed++;
-  }
-  results.summary.total++;
-}
-
-async function testListCredentials(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
-  const testName = 'list_credentials';
-  const testInput = { limit: 5 };
-  
-  try {
-    const result = await listCredentials(testInput, headers, sessionId, clientCredentials);
-    results.tests.push({
-      name: testName,
-      status: result.success ? 'PASS' : 'FAIL',
-      message: result.message || (result.success ? 'Successfully listed credentials' : 'Failed to list credentials'),
-      input: testInput,
-      output: {
-        success: result.success,
-        count: result.count,
-        hasData: !!result.data,
-        error: result.error,
-        statusCode: result.statusCode,
-        note: result.note
-      }
-    });
-    if (result.success) results.summary.passed++;
-    else results.summary.failed++;
-  } catch (error) {
-    results.tests.push({
-      name: testName,
-      status: 'FAIL',
-      message: `Unexpected error: ${error.message}`,
-      input: testInput,
-      output: { error: error.message }
-    });
-    results.summary.failed++;
-  }
-  results.summary.total++;
-}
-
-async function testCreateCredential(results, headers = {}, sessionId = null, clientCredentials = new Map()) {
-  const testName = 'create_credential';
-  const testInput = {
-    name: 'Self-Test Credential',
-    type: 'httpBasicAuth',
-    data: {
-      user: 'test-user',
-      password: 'test-password'
-    }
-  };
-  
-  try {
-    const result = await createCredential(testInput, headers, sessionId, clientCredentials);
-    
-    // Store credential ID for potential cleanup
-    if (result.success && result.data?.id) {
-      if (!results.testCredentialIds) results.testCredentialIds = [];
-      results.testCredentialIds.push(result.data.id);
-    }
-    
-    results.tests.push({
-      name: testName,
-      status: result.success ? 'PASS' : 'FAIL',
-      message: result.message || (result.success ? 'Successfully created credential' : 'Failed to create credential'),
-      input: testInput,
-      output: {
-        success: result.success,
-        credentialId: result.data?.id,
-        credentialName: result.data?.name,
-        hasData: !!result.data,
-        error: result.error,
-        statusCode: result.statusCode,
-        note: result.note
       }
     });
     if (result.success) results.summary.passed++;

@@ -51,6 +51,39 @@ export const toolRegistry = [
     }
   },
   {
+    name: 'execute_workflow',
+    description: 'Execute a workflow manually with optional input data',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        workflowId: {
+          type: 'string',
+          description: 'The workflow ID to execute'
+        },
+        inputData: {
+          type: 'object',
+          description: 'Optional input data for the workflow execution',
+          default: {}
+        }
+      },
+      required: ['workflowId']
+    }
+  },
+  {
+    name: 'get_execution',
+    description: 'Get detailed information about a specific execution by ID',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        executionId: {
+          type: 'string',
+          description: 'The execution ID to retrieve'
+        }
+      },
+      required: ['executionId']
+    }
+  },
+  {
     name: 'create_workflow',
     description: 'Create a new workflow in n8n',
     inputSchema: {
