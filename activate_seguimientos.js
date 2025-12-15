@@ -14,23 +14,22 @@ function log(msg) {
 
 async function main() {
     try {
-        log('Starting deployment...');
-        const { createWorkflow } = await import('./tools/workflow-tools.js');
-        log('Tools imported');
+        log('Starting activation...');
+        const { activateWorkflow } = await import('./tools/workflow-tools.js');
 
-        const workflowJson = JSON.parse(fs.readFileSync('./workflow_seguimientos_diarios.json', 'utf8'));
-        log(`Deploying workflow: ${workflowJson.name}...`);
+        const workflowId = 'M41AzCPlhql4OhOe'; // ID from previous run logs
+        log(`Activating workflow ID: ${workflowId}...`);
 
-        const args = {
-            name: workflowJson.name,
-            nodes: workflowJson.nodes,
-            connections: workflowJson.connections,
-            settings: workflowJson.settings || {}
-        };
+        const result = await activateWorkflow({ workflowId });
 
-        const result = await createWorkflow(args);
-        log('Result result:');
+        log('Activation result:');
         log(JSON.stringify(result, null, 2));
+
+        if (result.success) {
+            log('✅ Workflow activated successfully!');
+        } else {
+            console.error('❌ Failed to activate workflow:', result.error);
+        }
 
     } catch (error) {
         log(`Error: ${error.message}`);

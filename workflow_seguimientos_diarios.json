@@ -22,25 +22,22 @@
         },
         {
             "parameters": {
-                "operation": "getAll",
-                "tableId": "client_followups",
-                "returnAll": true,
-                "filterType": "string",
-                "filterString": "scheduled_date=lte.{{ $now.format('yyyy-MM-dd') }}&status=eq.pending&select=*,clients(name,phone)",
-                "options": {}
+                "operation": "executeQuery",
+                "query": "SELECT\n  f.*,\n  json_build_object('name', c.name, 'phone', c.phone) as clients\nFROM\n  client_followups f\nJOIN\n  clients c ON f.client_id = c.id\nWHERE\n  f.scheduled_date <= CURRENT_DATE\n  AND f.status = 'pending'",
+                "additionalOptions": {}
             },
-            "id": "supabase-get",
+            "id": "postgres-get",
             "name": "Get Followups Pendientes",
-            "type": "n8n-nodes-base.supabase",
+            "type": "n8n-nodes-base.postgres",
             "typeVersion": 1,
             "position": [
                 220,
                 0
             ],
             "credentials": {
-                "supabaseApi": {
-                    "id": "supabase-creds",
-                    "name": "Supabase Allpol"
+                "postgres": {
+                    "id": "POSTGRES_CRED_ID_PLACEHOLDER",
+                    "name": "Postgres a Supabase"
                 }
             }
         },
@@ -78,7 +75,7 @@
         },
         {
             "parameters": {
-                "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${f.clients?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${f.clients?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
+                "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  // Postgres json column handling\n  const client = typeof f.clients === 'string' ? JSON.parse(f.clients) : f.clients;\n  \n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${client?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${client?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
             },
             "id": "code-format",
             "name": "Formatear Mensaje",
