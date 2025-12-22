@@ -18,42 +18,14 @@
         },
         {
             "parameters": {
-                "method": "POST",
-                "url": "https://google.serper.dev/search",
-                "sendHeaders": true,
-                "headerParameters": {
-                    "parameters": [
-                        {
-                            "name": "X-API-KEY",
-                            "value": "={{ $credentials.serperApi }}"
-                        },
-                        {
-                            "name": "Content-Type",
-                            "value": "application/json"
-                        }
-                    ]
-                },
-                "sendBody": true,
-                "bodyParameters": {
-                    "parameters": [
-                        {
-                            "name": "q",
-                            "value": "={{ $json.body.keyword }}"
-                        },
-                        {
-                            "name": "gl",
-                            "value": "ar"
-                        },
-                        {
-                            "name": "hl",
-                            "value": "es-419"
-                        }
-                    ]
-                },
-                "options": {}
+                "q": "={{ $json.body.keyword }}",
+                "options": {
+                    "gl": "ar",
+                    "hl": "es"
+                }
             },
-            "type": "n8n-nodes-base.httpRequest",
-            "typeVersion": 4.1,
+            "type": "n8n-nodes-base.serpApi",
+            "typeVersion": 1,
             "position": [
                 250,
                 0
@@ -61,15 +33,15 @@
             "id": "serper-node",
             "name": "Get SERP Data (AR)",
             "credentials": {
-                "serperApi": {
+                "serpApi": {
                     "id": "",
-                    "name": "Serper API Key"
+                    "name": "SerpApi Account"
                 }
             }
         },
         {
             "parameters": {
-                "model": "gemini-1.5-flash",
+                "model": "gemini-1.5-pro",
                 "options": {
                     "temperature": 0.2
                 }
@@ -92,7 +64,7 @@
         {
             "parameters": {
                 "promptType": "define",
-                "text": "=### ROLE\nYou are a Senior SEO Strategist and Conversion Rate Optimization (CRO) Expert specializing in \"Rank and Rent\" local service websites for the Argentine market.\n\n### TASK\nAnalyze the provided SERP Data. Compare the content found in the top competitors against your internal expert knowledge of what a perfect, comprehensive service page should contain.\n\n### INPUT DATA\n1. Target Keyword/Niche: {{ $(\"Webhook Trigger\").item.json.body.keyword }}\n2. Location: Argentina (gl: ar)\n3. SERP Data (Competitors): {{ JSON.stringify($json) }}\n\n### ANALYSIS LOGIC\n1. **Identify Entities Found:** What topics are the competitors already covering?\n2. **Identify TRUE GAPS:** Based on your expert knowledge of the trade (e.g., specific tools, regulations, common emergency pain points in Argentina), what are the competitors FAILING to mention? These are my opportunities.\n3. **Interactive Tool Ideation:** Propose a logic-based \"Micro-Tool\" (Calculator, Quiz, Estimator) specific to this niche.\n\n### OUTPUT FORMAT\nReturn ONLY a raw JSON object. No markdown, no intro.\nUse this schema:\n\n{\n  \"analysis_summary\": {\n    \"niche_difficulty\": \"Low/Medium/High\",\n    \"search_intent\": \"Informational/Transactional\"\n  },\n  \"semantic_profile\": {\n    \"core_entities_found\": [\"Array of strings\"],\n    \"missing_semantic_gaps\": [\"Array of strings: Critical topics NOT found in SERP\"],\n    \"local_nuances\": [\"Array of strings: Rioplatense terms to use (e.g., 'Flete' instead of 'Mudanza', 'Pileta' instead of 'Piscina')\"]\n  },\n  \"content_strategy\": {\n    \"recommended_h1\": \"String\",\n    \"structure_outline\": [\n      {\n        \"heading_level\": \"H2\",\n        \"title\": \"String\",\n        \"content_instructions\": \"String: How to fill the gap here\"\n      }\n    ]\n  },\n  \"interactive_tool_suggestion\": {\n    \"tool_name\": \"String (e.g., 'Calculadora de Materiales')\",\n    \"logic_description\": \"String: Inputs -> Processing -> Output\"\n  }\n}",
+                "text": "=### ROLE\nYou are a Senior SEO Strategist and Conversion Rate Optimization (CRO) Expert specializing in \"Rank and Rent\" local service websites for the Argentine market.\n\n### TASK\nAnalyze the provided SERP Data. Compare the content found in the top competitors against your internal expert knowledge of what a perfect, comprehensive service page should contain.\n\n### INPUT DATA\n1. Target Keyword/Niche: {{ $(\"Webhook Trigger\").item.json.body.keyword }}\n2. Location: Argentina (gl: ar)\n3. SERP Data (Competitors): {{ JSON.stringify($json) }}\n\n### ANALYSIS LOGIC\n1. **Identify Entities Found:** What topics are the competitors already covering?\n2. **Identify TRUE GAPS:** Based on your expert knowledge of the trade (e.g., specific tools, regulations, common emergency pain points in Argentina), what are the competitors FAILING to mention? These are my opportunities.\n3. **Interactive Tool Ideation:** Propose a logic-based \"Micro-Tool\" (Calculator, Quiz, Estimator) specific to this niche that helps the user solve a specific doubt regarding price or quantity.\n\n### OUTPUT FORMAT\nReturn ONLY a raw JSON object. No markdown, no intro.\nUse this schema:\n\n{\n  \"analysis_summary\": {\n    \"niche_difficulty\": \"Low/Medium/High\",\n    \"search_intent\": \"Informational/Transactional\"\n  },\n  \"semantic_profile\": {\n    \"core_entities_found\": [\"Array of strings\"],\n    \"missing_semantic_gaps\": [\"Array of strings: Critical topics NOT found in SERP\"],\n    \"local_nuances\": [\"Array of strings: Rioplatense terms to use (e.g., 'Flete', 'Cochera', 'Presupuesto')\"]\n  },\n  \"content_strategy\": {\n    \"recommended_h1\": \"String\",\n    \"structure_outline\": [\n      {\n        \"heading_level\": \"H2\",\n        \"title\": \"String\",\n        \"content_instructions\": \"String: How to fill the gap here\"\n      }\n    ]\n  },\n  \"interactive_tool_suggestion\": {\n    \"tool_name\": \"String (e.g., 'Calculadora de Materiales')\",\n    \"tool_goal\": \"String (What problem does it solve?)\",\n    \"required_inputs\": [\"Array of strings: What does the user need to enter? e.g., 'Ancho', 'Largo', 'Tipo de Material'\"],\n    \"logic_description\": \"String: How to calculate the result based on inputs\"\n  }\n}",
                 "hasOutputParser": false
             },
             "type": "@n8n/n8n-nodes-langchain.chainLlm",
@@ -102,19 +74,7 @@
                 0
             ],
             "id": "ai-agent-chain",
-            "name": "SEO Strategist Agent",
-            "inputs": [
-                {
-                    "node": "Get SERP Data (AR)",
-                    "type": "main",
-                    "index": 0
-                },
-                {
-                    "node": "Google Gemini Chat Model",
-                    "type": "ai_languageModel",
-                    "index": 0
-                }
-            ]
+            "name": "SEO Strategist Agent"
         },
         {
             "parameters": {

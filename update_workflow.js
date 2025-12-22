@@ -1,34 +1,33 @@
-import { createWorkflow } from './tools/workflow-tools.js';
+import { updateWorkflow, deleteWorkflow } from './tools/workflow-tools.js';
 import fs from 'fs';
-
-// Override env vars after module load but before API calls
-// Note: utils.js reads these at module load, so we use .env file instead
-// For this script, we'll pass credentials directly
 
 async function main() {
     try {
-        console.log('Reading workflow definition...');
+        const workflowId = 'xjiVvATOqvZLxcKZ'; // ID from previous deploy
+
+        console.log('Reading updated workflow definition...');
         const workflowJson = JSON.parse(fs.readFileSync('./workflow_seo_extractor.json', 'utf8'));
 
-        console.log('Deploying workflow:', workflowJson.name);
-        console.log('Target URL:', process.env.N8N_BASE_URL || 'from .env');
+        console.log('Updating workflow:', workflowJson.name);
+        console.log('Workflow ID:', workflowId);
 
         const args = {
+            workflowId: workflowId,
             name: workflowJson.name,
             nodes: workflowJson.nodes,
             connections: workflowJson.connections,
             settings: workflowJson.settings || {}
         };
 
-        const result = await createWorkflow(args);
+        const result = await updateWorkflow(args);
 
         if (result.success) {
-            console.log('SUCCESS! Workflow deployed.');
+            console.log('SUCCESS! Workflow updated.');
             console.log('ID:', result.data.id);
             console.log('Active:', result.data.active);
             console.log('Name:', result.data.name);
         } else {
-            console.error('FAILED to deploy workflow:', result.error);
+            console.error('FAILED to update workflow:', result.error);
             console.error('Status code:', result.statusCode);
         }
 
