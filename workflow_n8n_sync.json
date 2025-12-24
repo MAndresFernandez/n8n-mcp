@@ -44,10 +44,7 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "SELECT * FROM sync_tasks WHERE id = $1",
-                "additionalFields": {
-                    "queryParams": "={{$json.body.sync_id}}"
-                }
+                "query": "={{\"SELECT * FROM sync_tasks WHERE id = '\" + $json.body.sync_id + \"'::uuid\"}}"
             },
             "id": "postgres-get-config",
             "name": "Postgres Get Config",
@@ -147,10 +144,7 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "UPDATE sync_tasks SET last_update = NOW(), last_action_log = $1 WHERE id = $2::uuid",
-                "additionalFields": {
-                    "queryParams": "={{ 'Sincronización Exitosa: ' + $json.count + ' filas procesadas.' }},{{$node[\"Webhook\"].json.body.sync_id}}"
-                }
+                "query": "={{\"UPDATE sync_tasks SET last_update = NOW(), last_action_log = 'Sincronización Exitosa: \" + $json.count + \" filas procesadas.' WHERE id = '\" + $node[\"Webhook\"].json.body.sync_id + \"'::uuid\"}}"
             },
             "id": "update-success",
             "name": "Update Success",
@@ -181,10 +175,7 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "UPDATE sync_tasks SET last_action_log = $1 WHERE id = $2::uuid",
-                "additionalFields": {
-                    "queryParams": "={{ 'Error: ' + $execution.error.message }},{{$node[\"Webhook\"].json.body.sync_id}}"
-                }
+                "query": "={{\"UPDATE sync_tasks SET last_action_log = 'Error: \" + $execution.error.message.replace(/'/g, \"''\") + \"' WHERE id = '\" + $node[\"Webhook\"].json.body.sync_id + \"'::uuid\"}}"
             },
             "id": "update-error",
             "name": "Update Error",
