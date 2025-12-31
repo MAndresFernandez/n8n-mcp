@@ -1,10 +1,10 @@
 {
-    "name": "WhatsApp Status Publisher (Evolution API)",
+    "name": "WhatsApp Status Publisher (DB Driven)",
     "nodes": [
         {
             "parameters": {
                 "httpMethod": "POST",
-                "path": "whatsapp-status",
+                "path": "whatsapp-publish",
                 "options": {}
             },
             "type": "n8n-nodes-base.webhook",
@@ -15,6 +15,35 @@
             ],
             "id": "webhook-trigger",
             "name": "Webhook Trigger"
+        },
+        {
+            "parameters": {
+                "operation": "get",
+                "tableId": "whatsapp_statuses",
+                "filters": {
+                    "conditions": [
+                        {
+                            "keyName": "id",
+                            "value": "={{ $json.body.id }}",
+                            "operator": "equal"
+                        }
+                    ]
+                }
+            },
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
+            "position": [
+                220,
+                0
+            ],
+            "id": "supabase-get",
+            "name": "Supabase Get Record",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "SUPABASE_CRED_ID",
+                    "name": "Supabase Account"
+                }
+            }
         },
         {
             "parameters": {
@@ -30,7 +59,7 @@
                                 },
                                 "conditions": [
                                     {
-                                        "leftValue": "={{ $json.tipo }}",
+                                        "leftValue": "={{ $json.type }}",
                                         "rightValue": "text",
                                         "operator": {
                                             "type": "string",
@@ -53,7 +82,7 @@
                                 },
                                 "conditions": [
                                     {
-                                        "leftValue": "={{ $json.tipo }}",
+                                        "leftValue": "={{ $json.type }}",
                                         "rightValue": "image",
                                         "operator": {
                                             "type": "string",
@@ -76,7 +105,7 @@
                                 },
                                 "conditions": [
                                     {
-                                        "leftValue": "={{ $json.tipo }}",
+                                        "leftValue": "={{ $json.type }}",
                                         "rightValue": "video",
                                         "operator": {
                                             "type": "string",
@@ -96,105 +125,119 @@
             "type": "n8n-nodes-base.switch",
             "typeVersion": 3.2,
             "position": [
-                250,
+                440,
                 0
             ],
-            "id": "switch-type",
-            "name": "Check content type"
+            "id": "check-media-type",
+            "name": "Check Media Type"
         },
         {
             "parameters": {
                 "resource": "messages-api",
-                "operation": "sendText",
-                "instanceName": "YOUR_INSTANCE_NAME",
-                "remoteJid": "status@broadcast",
-                "messageText": "={{ $json.contenido }}",
+                "operation": "send-stories",
+                "type": "text",
+                "instanceName": "Malco ARG",
+                "messageText": "={{ $json.content }}",
                 "options_message": {
-                    "backgroundColor": "#FF0000",
-                    "font": 1
+                    "backgroundColor": "#000000",
+                    "font": 1,
+                    "allContacts": true
                 }
             },
             "type": "n8n-nodes-evolution-api.evolutionApi",
             "typeVersion": 1,
             "position": [
-                500,
-                -100
+                700,
+                -120
             ],
-            "id": "evo-send-text",
-            "name": "Evolution Send Text",
+            "id": "send-story-text",
+            "name": "Send Story Text",
             "credentials": {
                 "evolutionApi": {
-                    "id": "placeholder_id",
-                    "name": "Evolution API Account"
+                    "id": "uFLlpp0hjQkOnZnJ",
+                    "name": "Evolution 5492216115728 - Malco ARG"
                 }
             }
         },
         {
             "parameters": {
                 "resource": "messages-api",
-                "operation": "sendMedia",
-                "instanceName": "YOUR_INSTANCE_NAME",
-                "remoteJid": "status@broadcast",
-                "mediaUrl": "={{ $json.contenido }}",
-                "mediaType": "image",
+                "operation": "send-stories",
+                "type": "image",
+                "instanceName": "Malco ARG",
+                "mediaUrl": "={{ $json.content }}",
                 "caption": "={{ $json.caption }}",
-                "options_message": {}
+                "options_message": {
+                    "allContacts": true
+                }
             },
             "type": "n8n-nodes-evolution-api.evolutionApi",
             "typeVersion": 1,
             "position": [
-                500,
-                100
+                700,
+                60
             ],
-            "id": "evo-send-image",
-            "name": "Evolution Send Image",
+            "id": "send-story-image",
+            "name": "Send Story Image",
             "credentials": {
                 "evolutionApi": {
-                    "id": "placeholder_id",
-                    "name": "Evolution API Account"
+                    "id": "uFLlpp0hjQkOnZnJ",
+                    "name": "Evolution 5492216115728 - Malco ARG"
                 }
             }
         },
         {
             "parameters": {
                 "resource": "messages-api",
-                "operation": "sendMedia",
-                "instanceName": "YOUR_INSTANCE_NAME",
-                "remoteJid": "status@broadcast",
-                "mediaUrl": "={{ $json.contenido }}",
-                "mediaType": "video",
+                "operation": "send-stories",
+                "type": "video",
+                "instanceName": "Malco ARG",
+                "mediaUrl": "={{ $json.content }}",
                 "caption": "={{ $json.caption }}",
-                "options_message": {}
+                "options_message": {
+                    "allContacts": true
+                }
             },
             "type": "n8n-nodes-evolution-api.evolutionApi",
             "typeVersion": 1,
             "position": [
-                500,
-                300
+                700,
+                240
             ],
-            "id": "evo-send-video",
-            "name": "Evolution Send Video",
+            "id": "send-story-video",
+            "name": "Send Story Video",
             "credentials": {
                 "evolutionApi": {
-                    "id": "placeholder_id",
-                    "name": "Evolution API Account"
+                    "id": "uFLlpp0hjQkOnZnJ",
+                    "name": "Evolution 5492216115728 - Malco ARG"
                 }
             }
         },
         {
             "parameters": {
-                "respondWith": "json",
-                "responseBody": "{\n  \"success\": true,\n  \"message\": \"Status queued\",\n  \"type\": \"{{ $json.tipo }}\"\n}",
-                "options": {}
+                "operation": "update",
+                "tableId": "whatsapp_statuses",
+                "updateKey": "id",
+                "value": "={{ $('Webhook Trigger').item.json.body.id }}",
+                "fields": {
+                    "status": "published",
+                    "published_at": "={{ new Date().toISOString() }}"
+                }
             },
-            "type": "n8n-nodes-base.respondToWebhook",
-            "typeVersion": 1.1,
+            "type": "n8n-nodes-base.supabase",
+            "typeVersion": 1,
             "position": [
-                800,
+                1000,
                 0
             ],
-            "id": "response-success",
-            "name": "Respond Success"
+            "id": "supabase-update",
+            "name": "Update Status Published",
+            "credentials": {
+                "supabaseApi": {
+                    "id": "SUPABASE_CRED_ID",
+                    "name": "Supabase Account"
+                }
+            }
         }
     ],
     "connections": {
@@ -202,65 +245,76 @@
             "main": [
                 [
                     {
-                        "node": "Check content type",
+                        "node": "Supabase Get Record",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Check content type": {
+        "Supabase Get Record": {
             "main": [
                 [
                     {
-                        "node": "Evolution Send Text",
+                        "node": "Check Media Type",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Media Type": {
+            "main": [
+                [
+                    {
+                        "node": "Send Story Text",
                         "type": "main",
                         "index": 0
                     }
                 ],
                 [
                     {
-                        "node": "Evolution Send Image",
+                        "node": "Send Story Image",
                         "type": "main",
                         "index": 0
                     }
                 ],
                 [
                     {
-                        "node": "Evolution Send Video",
+                        "node": "Send Story Video",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Evolution Send Text": {
+        "Send Story Text": {
             "main": [
                 [
                     {
-                        "node": "Respond Success",
+                        "node": "Update Status Published",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Evolution Send Image": {
+        "Send Story Image": {
             "main": [
                 [
                     {
-                        "node": "Respond Success",
+                        "node": "Update Status Published",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Evolution Send Video": {
+        "Send Story Video": {
             "main": [
                 [
                     {
-                        "node": "Respond Success",
+                        "node": "Update Status Published",
                         "type": "main",
                         "index": 0
                     }

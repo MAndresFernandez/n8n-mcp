@@ -5625,7 +5625,721 @@
     "tags": []
   },
   {
-    "updatedAt": "2025-12-15T18:09:12.902Z",
+    "updatedAt": "2025-12-24T15:29:51.000Z",
+    "createdAt": "2025-12-24T15:26:00.460Z",
+    "id": "BhMqg4cSTIPhRrxh",
+    "name": "Sync Project - Sync Now",
+    "active": false,
+    "isArchived": true,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "sync-webhook",
+          "options": {}
+        },
+        "id": "webhook-trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "values": {
+            "string": [
+              {
+                "name": "supabase_url",
+                "value": "https://qvxxhwcspqntdesrajph.supabase.co"
+              },
+              {
+                "name": "supabase_key",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2eHhod2NzcHFudGRlc3JhanBoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjQyOTI2MCwiZXhwIjoyMDgyMDA1MjYwfQ.wpVpE0i-KYtaH-LTR4Ho9IXtg_TFTIxzkO7T4gWsnbY"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "set-auth",
+        "name": "Set Supabase Auth",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 1,
+        "position": [
+          200,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{\"SELECT * FROM sync_tasks WHERE id = '\" + $json.body.sync_id + \"'::uuid\"}}"
+        },
+        "id": "postgres-get-config",
+        "name": "Postgres Get Config",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          400,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "POSTGRES_CREDENTIAL_ID_PLACEHOLDER",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "sheetId": "={{$json.sheet_id}}",
+          "range": "={{$json.range_config}}",
+          "options": {}
+        },
+        "id": "google-sheets",
+        "name": "Google Sheets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 1,
+        "position": [
+          600,
+          0
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "XCVUrxXJwWv4s45E",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{$node[\"Set Supabase Auth\"].json[\"supabase_url\"]}}/storage/v1/object/public/templates/{{$node[\"Postgres Get Config\"].json[\"template_path\"]}}",
+          "options": {}
+        },
+        "id": "download-template",
+        "name": "Download Template",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [
+          600,
+          200
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const template = $items(\"Download Template\")[0].json.data;\nconst rows = $items(\"Google Sheets\");\n\nlet finalHtml = \"\";\n\n/* Iterate over Google Sheets rows and replace placeholders in template */\nfor (const row of rows) {\n  let rowHtml = typeof template === 'string' ? template : JSON.stringify(template);\n  \n  for (const key of Object.keys(row.json)) {\n    // Replace {{ColumnName}} with value\n    // Using simple replace (first occurrence) or global regex\n    const val = row.json[key];\n    if (val !== undefined && val !== null) {\n       rowHtml = rowHtml.split('{{' + key + '}}').join(val);\n    }\n  }\n  finalHtml += rowHtml + \"\\n\";\n}\n\nreturn [{ json: { html: finalHtml, count: rows.length } }];"
+        },
+        "id": "process-template",
+        "name": "Process Template",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          800,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{$node[\"Set Supabase Auth\"].json[\"supabase_url\"]}}/storage/v1/object/public-sites/{{$node[\"Postgres Get Config\"].json[\"output_path\"]}}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "text/html"
+              },
+              {
+                "name": "Authorization",
+                "value": "Bearer {{$node[\"Set Supabase Auth\"].json[\"supabase_key\"]}}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "raw",
+          "rawContentType": "text/html",
+          "body": "={{$json.html}}",
+          "options": {}
+        },
+        "id": "upload-result",
+        "name": "Upload Result",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [
+          1000,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{\"UPDATE sync_tasks SET last_update = NOW(), last_action_log = 'Sincronización Exitosa: \" + $json.count + \" filas procesadas.' WHERE id = '\" + $node[\"Webhook\"].json.body.sync_id + \"'::uuid\"}}"
+        },
+        "id": "update-success",
+        "name": "Update Success",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          1200,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "POSTGRES_CREDENTIAL_ID_PLACEHOLDER",
+            "name": "Postgres account"
+          }
+        }
+      },
+      {
+        "parameters": {},
+        "id": "error-trigger",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          400,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "={{\"UPDATE sync_tasks SET last_action_log = 'Error: \" + $execution.error.message.replace(/'/g, \"''\") + \"' WHERE id = '\" + $node[\"Webhook\"].json.body.sync_id + \"'::uuid\"}}"
+        },
+        "id": "update-error",
+        "name": "Update Error",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          600,
+          400
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "POSTGRES_CREDENTIAL_ID_PLACEHOLDER",
+            "name": "Postgres account"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Set Supabase Auth",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Supabase Auth": {
+        "main": [
+          [
+            {
+              "node": "Postgres Get Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres Get Config": {
+        "main": [
+          [
+            {
+              "node": "Google Sheets",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Download Template",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Sheets": {
+        "main": [
+          [
+            {
+              "node": "Process Template",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Download Template": {
+        "main": [
+          [
+            {
+              "node": "Process Template",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Process Template": {
+        "main": [
+          [
+            {
+              "node": "Upload Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upload Result": {
+        "main": [
+          [
+            {
+              "node": "Update Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Update Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "callerPolicy": "workflowsFromSameOwner",
+      "availableInMCP": false
+    },
+    "staticData": null,
+    "meta": null,
+    "pinData": null,
+    "versionId": "bd98f08d-8197-411b-b43a-2dbfc79124a7",
+    "activeVersionId": null,
+    "triggerCount": 0,
+    "shared": [
+      {
+        "updatedAt": "2025-12-24T15:26:00.465Z",
+        "createdAt": "2025-12-24T15:26:00.465Z",
+        "role": "workflow:owner",
+        "workflowId": "BhMqg4cSTIPhRrxh",
+        "projectId": "CyuOAJo56zhDqPtw"
+      }
+    ],
+    "activeVersion": null,
+    "tags": []
+  },
+  {
+    "updatedAt": "2025-12-24T15:29:38.000Z",
+    "createdAt": "2025-12-22T20:15:33.602Z",
+    "id": "GSY1cBgyuHNLnq8i",
+    "name": "Sync Project - Sync Now",
+    "active": false,
+    "isArchived": true,
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "sync-webhook",
+          "options": {}
+        },
+        "id": "webhook-trigger",
+        "name": "Webhook",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 1,
+        "position": [
+          0,
+          0
+        ],
+        "webhookId": "6004196e-307b-438d-97f9-2208f1f7da0d"
+      },
+      {
+        "parameters": {
+          "values": {
+            "string": [
+              {
+                "name": "supabase_url",
+                "value": "https://qvxxhwcspqntdesrajph.supabase.co"
+              },
+              {
+                "name": "supabase_key",
+                "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF2eHhod2NzcHFudGRlc3JhanBoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NjQyOTI2MCwiZXhwIjoyMDgyMDA1MjYwfQ.wpVpE0i-KYtaH-LTR4Ho9IXtg_TFTIxzkO7T4gWsnbY"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "id": "set-auth",
+        "name": "Set Supabase Auth",
+        "type": "n8n-nodes-base.set",
+        "typeVersion": 1,
+        "position": [
+          208,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "SELECT * FROM sync_tasks WHERE id = $1",
+          "additionalFields": {
+            "queryParams": "={{$json.body.sync_id}}"
+          }
+        },
+        "id": "postgres-get-config",
+        "name": "Postgres Get Config",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          400,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "aobTbK1v7d49Vmqp",
+            "name": "SyncProyect - Postgres a Supabase"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "authentication": "oAuth2",
+          "sheetId": "={{$json.sheet_id}}",
+          "range": "={{$json.range_config}}",
+          "options": {}
+        },
+        "id": "google-sheets",
+        "name": "Google Sheets",
+        "type": "n8n-nodes-base.googleSheets",
+        "typeVersion": 1,
+        "position": [
+          608,
+          0
+        ],
+        "credentials": {
+          "googleSheetsOAuth2Api": {
+            "id": "XCVUrxXJwWv4s45E",
+            "name": "Google Sheets account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "url": "={{$node[\"Set Supabase Auth\"].json[\"supabase_url\"]}}/storage/v1/object/public/templates/{{$node[\"Postgres Get Configুরের\"].json[\"template_path\"]}}",
+          "options": {}
+        },
+        "id": "download-template",
+        "name": "Download Template",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [
+          608,
+          208
+        ]
+      },
+      {
+        "parameters": {
+          "jsCode": "const template = $items(\"Download Template\")[0].json.data;\nconst rows = $items(\"Google Sheets\");\n\nlet finalHtml = \"\";\n\n/* Iterate over Google Sheets rows and replace placeholders in template */\nfor (const row of rows) {\n  let rowHtml = typeof template === 'string' ? template : JSON.stringify(template);\n  \n  for (const key of Object.keys(row.json)) {\n    // Replace {{ColumnName}} with value\n    // Using simple replace (first occurrence) or global regex\n    const val = row.json[key];\n    if (val !== undefined && val !== null) {\n       rowHtml = rowHtml.split('{{' + key + '}}').join(val);\n    }\n  }\n  finalHtml += rowHtml + \"\\n\";\n}\n\nreturn [{ json: { html: finalHtml, count: rows.length } }];"
+        },
+        "id": "process-template",
+        "name": "Process Template",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 1,
+        "position": [
+          800,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "url": "={{$node[\"Set Supabase Auth\"].json[\"supabase_url\"]}}/storage/v1/object/public-sites/{{$node[\"Postgres Get Config\"].json[\"output_path\"]}}",
+          "options": {}
+        },
+        "id": "upload-result",
+        "name": "Upload Result",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 1,
+        "position": [
+          1008,
+          0
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE syncs SET last_update = NOW(), last_action = $1, status = 'success' WHERE id = $2",
+          "additionalFields": {
+            "queryParams": "={{ 'Sincronización Exitosa: ' + $json.count + ' filas procesadas.' }},{{$node[\"Postgres Get Config\"].json[\"id\"]}}"
+          }
+        },
+        "id": "update-success",
+        "name": "Update Success",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          1200,
+          0
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "aobTbK1v7d49Vmqp",
+            "name": "SyncProyect - Postgres a Supabase"
+          }
+        }
+      },
+      {
+        "parameters": {},
+        "id": "error-trigger",
+        "name": "Error Trigger",
+        "type": "n8n-nodes-base.errorTrigger",
+        "typeVersion": 1,
+        "position": [
+          400,
+          400
+        ]
+      },
+      {
+        "parameters": {
+          "operation": "executeQuery",
+          "query": "UPDATE sync_tasks SET last_action = $1, status = 'error' WHERE id = $2",
+          "additionalFields": {
+            "queryParams": "={{ 'Error: ' + $execution.error.message }},{{$node[\"Postgres Get Config\"].json[\"id\"]}}"
+          }
+        },
+        "id": "update-error",
+        "name": "Update Error",
+        "type": "n8n-nodes-base.postgres",
+        "typeVersion": 1,
+        "position": [
+          608,
+          400
+        ],
+        "credentials": {
+          "postgres": {
+            "id": "aobTbK1v7d49Vmqp",
+            "name": "SyncProyect - Postgres a Supabase"
+          }
+        }
+      }
+    ],
+    "connections": {
+      "Webhook": {
+        "main": [
+          [
+            {
+              "node": "Set Supabase Auth",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Set Supabase Auth": {
+        "main": [
+          [
+            {
+              "node": "Postgres Get Config",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Postgres Get Config": {
+        "main": [
+          [
+            {
+              "node": "Google Sheets",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Download Template",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Google Sheets": {
+        "main": [
+          [
+            {
+              "node": "Process Template",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Download Template": {
+        "main": [
+          [
+            {
+              "node": "Process Template",
+              "type": "main",
+              "index": 1
+            }
+          ]
+        ]
+      },
+      "Process Template": {
+        "main": [
+          [
+            {
+              "node": "Upload Result",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Upload Result": {
+        "main": [
+          [
+            {
+              "node": "Update Success",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Error Trigger": {
+        "main": [
+          [
+            {
+              "node": "Update Error",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "settings": {
+      "callerPolicy": "workflowsFromSameOwner",
+      "availableInMCP": true,
+      "timeSavedMode": "fixed",
+      "executionOrder": "v0"
+    },
+    "staticData": null,
+    "meta": {
+      "templateCredsSetupCompleted": true
+    },
+    "pinData": {
+      "Error Trigger": [
+        {
+          "json": {
+            "execution": {
+              "id": "30844",
+              "url": "https://n8n.cr-sites.com/workflow/GSY1cBgyuHNLnq8i/executions/30844",
+              "error": {
+                "length": 104,
+                "name": "error",
+                "severity": "ERROR",
+                "code": "42P01",
+                "position": "15",
+                "file": "parse_relation.c",
+                "line": "1449",
+                "routine": "parserOpenTable",
+                "query": "SELECT * FROM syncs WHERE id = null",
+                "message": "relation \"syncs\" does not exist",
+                "stack": "error: relation \"syncs\" does not exist\n    at Parser.parseErrorMessage (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/pg-protocol@1.6.1/node_modules/pg-protocol/src/parser.ts:369:69)\n    at Parser.handlePacket (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/pg-protocol@1.6.1/node_modules/pg-protocol/src/parser.ts:188:21)\n    at Parser.parse (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/pg-protocol@1.6.1/node_modules/pg-protocol/src/parser.ts:103:30)\n    at TLSSocket.<anonymous> (/usr/local/lib/node_modules/n8n/node_modules/.pnpm/pg-protocol@1.6.1/node_modules/pg-protocol/src/index.ts:7:48)\n    at TLSSocket.emit (node:events:519:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at TLSSocket.Readable.push (node:internal/streams/readable:392:5)\n    at TLSWrap.onStreamRead (node:internal/stream_base_commons:189:23)\n    at TLSWrap.callbackTrampoline (node:internal/async_hooks:130:17)"
+              },
+              "lastNodeExecuted": "Postgres Get Config",
+              "mode": "webhook",
+              "executionContext": {
+                "version": 1,
+                "establishedAt": 1766506569810,
+                "source": "webhook"
+              }
+            },
+            "workflow": {
+              "id": "GSY1cBgyuHNLnq8i",
+              "name": "Sync Project - Sync Now"
+            }
+          },
+          "pairedItem": {
+            "item": 0
+          }
+        }
+      ],
+      "Webhook": [
+        {
+          "json": {
+            "headers": {
+              "host": "n8n.cr-sites.com",
+              "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
+              "content-length": "50",
+              "accept": "*/*",
+              "accept-encoding": "gzip, br",
+              "accept-language": "es-US,es-419;q=0.9,es;q=0.8,en;q=0.7",
+              "cdn-loop": "cloudflare; loops=1",
+              "cf-connecting-ip": "186.22.62.56",
+              "cf-ipcountry": "AR",
+              "cf-ray": "9b2a0acbb82950bd-EZE",
+              "cf-visitor": "{\"scheme\":\"https\"}",
+              "content-type": "application/json",
+              "origin": "http://localhost:5173",
+              "priority": "u=1, i",
+              "referer": "http://localhost:5173/",
+              "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+              "sec-ch-ua-mobile": "?0",
+              "sec-ch-ua-platform": "\"Windows\"",
+              "sec-fetch-dest": "empty",
+              "sec-fetch-mode": "cors",
+              "sec-fetch-site": "cross-site",
+              "x-forwarded-for": "186.22.62.56, 104.23.237.26",
+              "x-forwarded-host": "n8n.cr-sites.com",
+              "x-forwarded-port": "443",
+              "x-forwarded-proto": "https",
+              "x-forwarded-server": "51e2ac7da1b4",
+              "x-real-ip": "104.23.237.26"
+            },
+            "params": {},
+            "query": {},
+            "body": {
+              "sync_id": "2a3d03f2-5ee7-4075-b3d4-449236770e08"
+            },
+            "webhookUrl": "https://n8n.cr-sites.com/webhook/sync-webhook",
+            "executionMode": "production"
+          },
+          "pairedItem": {
+            "item": 0
+          }
+        }
+      ]
+    },
+    "versionId": "1d6c08f1-2b10-4579-867d-ff57f57c5ad1",
+    "activeVersionId": null,
+    "triggerCount": 1,
+    "shared": [
+      {
+        "updatedAt": "2025-12-22T20:15:33.625Z",
+        "createdAt": "2025-12-22T20:15:33.625Z",
+        "role": "workflow:owner",
+        "workflowId": "GSY1cBgyuHNLnq8i",
+        "projectId": "CyuOAJo56zhDqPtw"
+      }
+    ],
+    "activeVersion": null,
+    "tags": []
+  },
+  {
+    "updatedAt": "2025-12-17T13:37:24.876Z",
     "createdAt": "2025-12-15T16:02:23.053Z",
     "id": "M41AzCPlhql4OhOe",
     "name": "Seguimientos Diarios Allpol",
@@ -5653,25 +6367,22 @@
       },
       {
         "parameters": {
-          "operation": "getAll",
-          "tableId": "client_followups",
-          "returnAll": true,
-          "filterType": "string",
-          "filterString": "scheduled_date=lte.{{ $now.format('yyyy-MM-dd') }}&status=eq.pending&select=*,clients(name,phone)",
-          "options": {}
+          "operation": "executeQuery",
+          "query": "SELECT\n  f.*,\n  json_build_object('name', c.name, 'phone', c.phone) as clients\nFROM\n  client_followups f\nJOIN\n  clients c ON f.client_id = c.id\nWHERE\n  f.scheduled_date <= CURRENT_DATE\n  AND f.status = 'pending'",
+          "additionalOptions": {}
         },
-        "id": "supabase-get",
+        "id": "postgres-get",
         "name": "Get Followups Pendientes",
-        "type": "n8n-nodes-base.supabase",
+        "type": "n8n-nodes-base.postgres",
         "typeVersion": 1,
         "position": [
           220,
           0
         ],
         "credentials": {
-          "supabaseApi": {
-            "id": "supabase-creds",
-            "name": "Supabase Allpol"
+          "postgres": {
+            "id": "8vHFUEVgUU6uzixr",
+            "name": "Postgres a Supabase"
           }
         }
       },
@@ -5709,7 +6420,7 @@
       },
       {
         "parameters": {
-          "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${f.clients?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${f.clients?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
+          "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  // Postgres json column handling\n  const client = typeof f.clients === 'string' ? JSON.parse(f.clients) : f.clients;\n  \n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${client?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${client?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
         },
         "id": "code-format",
         "name": "Formatear Mensaje",
@@ -5829,8 +6540,8 @@
     },
     "meta": null,
     "pinData": null,
-    "versionId": "df8f0479-b41f-4c92-a059-1c39855392cb",
-    "activeVersionId": "df8f0479-b41f-4c92-a059-1c39855392cb",
+    "versionId": "fca6e73b-800c-441c-8f7d-c6f966d2c638",
+    "activeVersionId": "fca6e73b-800c-441c-8f7d-c6f966d2c638",
     "triggerCount": 1,
     "shared": [
       {
@@ -5842,9 +6553,9 @@
       }
     ],
     "activeVersion": {
-      "updatedAt": "2025-12-15T18:09:12.904Z",
-      "createdAt": "2025-12-15T18:09:12.904Z",
-      "versionId": "df8f0479-b41f-4c92-a059-1c39855392cb",
+      "updatedAt": "2025-12-15T18:19:45.041Z",
+      "createdAt": "2025-12-15T18:19:45.041Z",
+      "versionId": "fca6e73b-800c-441c-8f7d-c6f966d2c638",
       "workflowId": "M41AzCPlhql4OhOe",
       "nodes": [
         {
@@ -5868,25 +6579,22 @@
         },
         {
           "parameters": {
-            "operation": "getAll",
-            "tableId": "client_followups",
-            "returnAll": true,
-            "filterType": "string",
-            "filterString": "scheduled_date=lte.{{ $now.format('yyyy-MM-dd') }}&status=eq.pending&select=*,clients(name,phone)",
-            "options": {}
+            "operation": "executeQuery",
+            "query": "SELECT\n  f.*,\n  json_build_object('name', c.name, 'phone', c.phone) as clients\nFROM\n  client_followups f\nJOIN\n  clients c ON f.client_id = c.id\nWHERE\n  f.scheduled_date <= CURRENT_DATE\n  AND f.status = 'pending'",
+            "additionalOptions": {}
           },
-          "id": "supabase-get",
+          "id": "postgres-get",
           "name": "Get Followups Pendientes",
-          "type": "n8n-nodes-base.supabase",
+          "type": "n8n-nodes-base.postgres",
           "typeVersion": 1,
           "position": [
             220,
             0
           ],
           "credentials": {
-            "supabaseApi": {
-              "id": "supabase-creds",
-              "name": "Supabase Allpol"
+            "postgres": {
+              "id": "8vHFUEVgUU6uzixr",
+              "name": "Postgres a Supabase"
             }
           }
         },
@@ -5924,7 +6632,7 @@
         },
         {
           "parameters": {
-            "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${f.clients?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${f.clients?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
+            "jsCode": "const followups = $input.all();\n\nconst today = new Date().toLocaleDateString('es-AR', { \n  weekday: 'long', \n  year: 'numeric', \n  month: 'long', \n  day: 'numeric' \n});\n\nlet message = `📅 *Seguimientos pendientes*\\n${today}\\n\\n`;\n\nconst typeEmojis = {\n  'reminder': '🔔',\n  'grouping': '📦',\n  'material': '🏭'\n};\n\nconst typeNames = {\n  'reminder': 'Recordatorio',\n  'grouping': 'Oportunidad de Agrupación',\n  'material': 'Material Disponible'\n};\n\nfollowups.forEach((item, index) => {\n  const f = item.json;\n  // Postgres json column handling\n  const client = typeof f.clients === 'string' ? JSON.parse(f.clients) : f.clients;\n  \n  const emoji = typeEmojis[f.type] || '📌';\n  const typeName = typeNames[f.type] || f.type;\n  \n  // Calcular días de atraso\n  const schedDate = new Date(f.scheduled_date);\n  const todayDate = new Date();\n  const daysLate = Math.floor((todayDate - schedDate) / (1000 * 60 * 60 * 24));\n  const lateText = daysLate > 0 ? ` ⚠️ (${daysLate} días de atraso)` : '';\n  \n  message += `${index + 1}. ${emoji} *${client?.name || 'Cliente'}*${lateText}\\n`;\n  message += `   _${typeName}_\\n`;\n  if (f.notes) message += `   📝 ${f.notes}\\n`;\n  if (f.product_reference) message += `   📦 ${f.product_reference}\\n`;\n  message += `   📱 ${client?.phone || 'Sin teléfono'}\\n\\n`;\n});\n\nmessage += `─────────────────\\n`;\nmessage += `_Total: ${followups.length} seguimiento(s) pendiente(s)_\\n`;\nmessage += `\\n💡 _Abrí Allpol Gestión > Seguimientos para gestionar_`;\n\nreturn [{ json: { message, count: followups.length } }];"
           },
           "id": "code-format",
           "name": "Formatear Mensaje",
@@ -6256,1244 +6964,5 @@
     ],
     "activeVersion": null,
     "tags": []
-  },
-  {
-    "updatedAt": "2025-07-09T19:00:54.000Z",
-    "createdAt": "2025-06-20T02:51:26.992Z",
-    "id": "QO38vJeFnnqWKYlc",
-    "name": "Gestor de Gastos",
-    "active": false,
-    "isArchived": false,
-    "nodes": [
-      {
-        "parameters": {
-          "httpMethod": "POST",
-          "path": "recibir-mensaje",
-          "options": {}
-        },
-        "type": "n8n-nodes-base.webhook",
-        "typeVersion": 2,
-        "position": [
-          -208,
-          -64
-        ],
-        "id": "7b29c7e9-c760-4267-9b0b-252adcd9dc9a",
-        "name": "Webhook - recibir mensaje por whatsapp",
-        "webhookId": "13cc1ee2-de58-4855-b2fb-9e471b475605"
-      },
-      {
-        "parameters": {
-          "inputText": "={{ $json.body.data.message.conversation }}",
-          "categories": {
-            "categories": [
-              {
-                "category": "nuevo gasto",
-                "description": "el usuario pretende añadir un nuevo gasto"
-              },
-              {
-                "category": "consultas",
-                "description": "el usuario pretende información sobre gastos guardados"
-              }
-            ]
-          },
-          "options": {
-            "fallback": "discard"
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.textClassifier",
-        "typeVersion": 1.1,
-        "position": [
-          240,
-          -64
-        ],
-        "id": "2a59a1a1-4909-4981-81d2-1481dcb796f1",
-        "name": "Text Classifier"
-      },
-      {
-        "parameters": {
-          "model": {
-            "__rl": true,
-            "value": "claude-3-5-sonnet-20241022",
-            "mode": "list",
-            "cachedResultName": "Claude Sonnet 3.5 (New)"
-          },
-          "options": {}
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
-        "typeVersion": 1.3,
-        "position": [
-          352,
-          160
-        ],
-        "id": "fb532456-d481-4621-b69e-0754938e6e6d",
-        "name": "Anthropic Chat Model",
-        "credentials": {
-          "anthropicApi": {
-            "id": "KvZF7MNs1iI9NLKB",
-            "name": "Anthropic account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "conditions": {
-            "options": {
-              "caseSensitive": true,
-              "leftValue": "",
-              "typeValidation": "strict",
-              "version": 2
-            },
-            "conditions": [
-              {
-                "id": "b410bce2-ca6a-456f-8259-b4c9d77f92e3",
-                "leftValue": "={{ $json.body.data.pushName }}",
-                "rightValue": "Malco Fernandez",
-                "operator": {
-                  "type": "string",
-                  "operation": "equals",
-                  "name": "filter.operator.equals"
-                }
-              }
-            ],
-            "combinator": "and"
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.filter",
-        "typeVersion": 2.2,
-        "position": [
-          32,
-          -64
-        ],
-        "id": "0813acb7-2e9b-4de1-84cb-a023f5de08b7",
-        "name": "Filter"
-      },
-      {
-        "parameters": {
-          "promptType": "define",
-          "text": "={{ $json.body.data.message.conversation }}",
-          "options": {
-            "systemMessage": "Eres un agente de procesamiento de texto especializado en la interpretación de mensajes sobre gastos. Tu objetivo es extraer de forma precisa y estructurada la siguiente información clave del mensaje de entrada, adhiriéndote estrictamente a los formatos y categorías definidos.\n\nInstrucciones de Extracción:\nAnaliza el mensaje completo para identificar todos los datos relevantes.\n\nFormatea la salida como un objeto JSON con las siguientes claves. Asegúrate de que todas las claves estén presentes, incluso si su valor es nulo o por defecto.\n\n\nReglas Específicas para Cada Campo:\nfecha:\n\nExtrae la fecha explícitamente mencionada en el mensaje (ej., \"fecha de factura\", \"pagado el\").\n\nFormato: YYYY-MM-DD.\n\nSi no se encuentra fecha: Usa la fecha actual del sistema. Considera la fecha actual como 2025-06-29.\n\nemisor:\n\nIdentifica el nombre de la empresa o persona que emite el gasto.\n\nSi no se encuentra emisor: Asigna el valor \"sin emisor\".\n\ndetalle:\n\nCrea un array de strings. Cada elemento debe representar un ítem o concepto de gasto individualizado.\n\nSé lo más específico posible. Si se listan varios productos o servicios, sepáralos en elementos distintos del array.\n\ncategoria:\n\nAsigna una única categoría de la siguiente lista predefinida: comidas, viajes, cosas ricas, servicios, casa, auto, mascotas.\n\nPrioriza la categoría más relevante si el gasto podría encajar en varias. Si la información es ambigua, elige la que parezca más apropiada por el contexto general del mensaje.\n\nsub_total:\n\nExtrae el monto total del gasto antes de impuestos.\n\nFormato: Número flotante (ej., 123.45).\n\nSi no se especifica subtotal pero hay un total: Calcula el subtotal si los impuestos son conocidos.\n\nimpuestos:\n\nExtrae el monto total de los impuestos aplicados al gasto.\n\nFormato: Número flotante (ej., 12.30).\n\nSi no se mencionan impuestos: Asigna el valor 0.00.\n\ntotal_con_impuestos:\n\nExtrae el monto total final del gasto, incluyendo impuestos.\n\nFormato: Número flotante (ej., 135.75).\n\nSi solo hay un monto mencionado y no se distingue subtotal/impuestos: Asume que este es el total_con_impuestos y, si los impuestos no se mencionan, establece sub_total igual a total_con_impuestos e impuestos a 0.00.\n\nVerificación: Asegúrate de que total_con_impuestos sea igual o muy cercano a sub_total + impuestos (permite pequeñas diferencias por redondeo, pero si hay una discrepancia significativa, prioriza el total_con_impuestos explícito).\n\nextras:\n\nRecopila cualquier información adicional presente en el mensaje que no encaje en las categorías anteriores, pero que pueda ser relevante (ej., métodos de pago, notas específicas, referencias).\n\nSi no hay información extra: Asigna una cadena vacía \"\".\n\ncargado_por:\n\nEste campo es fijo. Asigna siempre el valor \"Malco\".\n\nConsideraciones Adicionales:\nTolerancia a errores de entrada: Sé robusto ante variaciones en el lenguaje, abreviaciones o errores tipográficos menores.\n\nClaridad sobre ambigüedad: Si alguna información es ambigua, haz la interpretación más lógica y conseradora y refleja esto en la salida. No inventes datos.\n\nPriorización de datos numéricos: Los valores numéricos (subtotal, impuestos, total) deben ser extraídos con alta precisión."
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.agent",
-        "typeVersion": 2,
-        "position": [
-          608,
-          -160
-        ],
-        "id": "c8ee86c1-26d9-4dfa-917d-96225dea0a94",
-        "name": "AI Agent"
-      },
-      {
-        "parameters": {
-          "options": {}
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatDeepSeek",
-        "typeVersion": 1,
-        "position": [
-          608,
-          64
-        ],
-        "id": "dbdac4a6-a557-44b2-b03f-35041d492893",
-        "name": "DeepSeek Chat Model",
-        "credentials": {
-          "deepSeekApi": {
-            "id": "l9T4qmBFqTej3Qxo",
-            "name": "DeepSeek account"
-          }
-        }
-      },
-      {
-        "parameters": {
-          "jsonSchemaExample": "{\n  \"fecha\": \"YYYY-MM-DD\",\n  \"emisor\": \"string\",\n  \"detalle\": \"array de strings\",\n  \"categoria\": \"string\",\n  \"sub_total\": \"float\",\n  \"impuestos\": \"float\",\n  \"total_con_impuestos\": \"float\",\n  \"extras\": \"string\",\n  \"cargado_por\": \"Malco\"\n}"
-        },
-        "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
-        "typeVersion": 1.3,
-        "position": [
-          800,
-          64
-        ],
-        "id": "8fd0b342-bbef-4f27-bb91-803251fbf9cb",
-        "name": "Structured Output Parser"
-      },
-      {
-        "parameters": {
-          "documentId": {
-            "__rl": true,
-            "mode": "list",
-            "value": ""
-          },
-          "sheetName": {
-            "__rl": true,
-            "mode": "list",
-            "value": ""
-          }
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.6,
-        "position": [
-          928,
-          64
-        ],
-        "id": "781ecdc8-d452-4382-b468-665b11738c6b",
-        "name": "Google Sheets"
-      }
-    ],
-    "connections": {
-      "Webhook - recibir mensaje por whatsapp": {
-        "main": [
-          [
-            {
-              "node": "Filter",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Anthropic Chat Model": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "Text Classifier",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Filter": {
-        "main": [
-          [
-            {
-              "node": "Text Classifier",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Text Classifier": {
-        "main": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "DeepSeek Chat Model": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Structured Output Parser": {
-        "ai_outputParser": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_outputParser",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Google Sheets": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      }
-    },
-    "settings": {
-      "executionOrder": "v1"
-    },
-    "staticData": null,
-    "meta": {
-      "templateCredsSetupCompleted": true
-    },
-    "pinData": {},
-    "versionId": "31cf1671-84ea-4563-986e-0f3074e4fdb1",
-    "activeVersionId": null,
-    "triggerCount": 0,
-    "shared": [
-      {
-        "updatedAt": "2025-06-20T02:51:26.995Z",
-        "createdAt": "2025-06-20T02:51:26.995Z",
-        "role": "workflow:owner",
-        "workflowId": "QO38vJeFnnqWKYlc",
-        "projectId": "CyuOAJo56zhDqPtw"
-      }
-    ],
-    "activeVersion": null,
-    "tags": []
-  },
-  {
-    "updatedAt": "2025-08-22T00:56:20.000Z",
-    "createdAt": "2025-08-22T00:56:20.619Z",
-    "id": "RpTYO3XGVfE22Xen",
-    "name": "My workflow",
-    "active": false,
-    "isArchived": false,
-    "nodes": [
-      {
-        "parameters": {
-          "updates": [
-            "message"
-          ],
-          "additionalFields": {}
-        },
-        "type": "n8n-nodes-base.telegramTrigger",
-        "typeVersion": 1.2,
-        "position": [
-          112,
-          208
-        ],
-        "id": "a8a07d88-aedf-426f-a286-ebd64cd3d294",
-        "name": "Telegram Trigger",
-        "webhookId": "be0f74d0-76b4-4ac4-ab1d-b9a9e51252f4"
-      },
-      {
-        "parameters": {
-          "rules": {
-            "values": [
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": true,
-                    "leftValue": "",
-                    "typeValidation": "strict",
-                    "version": 2
-                  },
-                  "conditions": [
-                    {
-                      "leftValue": "={{ $json.message.text }}",
-                      "rightValue": "",
-                      "operator": {
-                        "type": "string",
-                        "operation": "exists",
-                        "singleValue": true
-                      },
-                      "id": "2de0e1d8-b75f-4504-af83-7f8c0bf31740"
-                    }
-                  ],
-                  "combinator": "and"
-                },
-                "renameOutput": true,
-                "outputKey": "texto"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": true,
-                    "leftValue": "",
-                    "typeValidation": "strict",
-                    "version": 2
-                  },
-                  "conditions": [
-                    {
-                      "id": "b8952dfe-545d-495a-a5ce-4094deef7bd2",
-                      "leftValue": "={{ $json.message.voice.file_id }}",
-                      "rightValue": "",
-                      "operator": {
-                        "type": "string",
-                        "operation": "exists",
-                        "singleValue": true
-                      }
-                    }
-                  ],
-                  "combinator": "and"
-                },
-                "renameOutput": true,
-                "outputKey": "audio"
-              },
-              {
-                "conditions": {
-                  "options": {
-                    "caseSensitive": true,
-                    "leftValue": "",
-                    "typeValidation": "strict",
-                    "version": 2
-                  },
-                  "conditions": [
-                    {
-                      "id": "e041e04e-5ffb-42a5-9642-79e3affbd40c",
-                      "leftValue": "={{ $json.message.photo[0].file_id }}",
-                      "rightValue": "",
-                      "operator": {
-                        "type": "string",
-                        "operation": "exists",
-                        "singleValue": true
-                      }
-                    }
-                  ],
-                  "combinator": "and"
-                },
-                "renameOutput": true,
-                "outputKey": "imagen"
-              }
-            ]
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.switch",
-        "typeVersion": 3.2,
-        "position": [
-          288,
-          208
-        ],
-        "id": "9bd02e29-29cc-47fe-9593-1253f47f8817",
-        "name": "Switch"
-      },
-      {
-        "parameters": {
-          "assignments": {
-            "assignments": [
-              {
-                "id": "8785e0f6-f706-4415-9994-ffe55e68c6a3",
-                "name": "text",
-                "value": "={{ $json.message.text }}",
-                "type": "string"
-              }
-            ]
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.set",
-        "typeVersion": 3.4,
-        "position": [
-          512,
-          48
-        ],
-        "id": "c4afe816-b9cd-4098-9e61-626d47f3e7a5",
-        "name": "Edit Fields"
-      },
-      {
-        "parameters": {
-          "promptType": "define",
-          "text": "={{ $('Merge').item.json.text }}",
-          "options": {
-            "systemMessage": "=#Descripción General:\nEres mi agente de finanzas personal, te encargas de añadir los gastos y los ingresos que te voy diciendo utilizando las herramientas que tienes a continuación y me dirás la información de los gastos o ingresos según te lo solicite, a parte también te encargas de agendarme citas y añadir contactos nuevos, también pueden enviar email y mensajes de texto a los contactos cuando yo te lo pida.\n\n##Herramientas:\n-(Calculadora) sirve para que puedas realizar las operaciones necesarias cuando te pida datos en los que necesites hacer operaciones matemáticas.\n-(Gastos) Aquí añadirás los gastos que te vaya diciendo\n-(Ver Gastos) te servirá para consultar los gastos que he tenido.\n-(Ingresos) Aquí añadirás los ingresos que te vaya diciendo\n-Ver Ingresos) te servirá para consultar los ingresos que he realizado.\n-(Contactos) te sirve para crear contactos nuevos\n-(Ver Contactos) Te sirve para enviar mensajes y también email a los contactos y recibir la información de los contactos.\n-(Gmail) sirve para enviar email\n-(AGREGAR CITAS) sirve para añdir citas al calenadrio\n-(VER CITAS) sirve para obtener información de las citas\n\n## Reglas\nCuando envies los datos al sheet rellena los datos correctamente.\nAsegurate de añadir las citas al calendario en la fecha correcta\nCuando vayas a finalizar la conversación añade esto: Recuerda suscribirte al canal 😃 https://youtube.com/@agentesinteligenciaartificial?si=6tiMpXU0X8GAPKiD\nSi ya lo has enviado en el mismo chat no vuelvas a enviarlo.\n\n## Recordatorios Finales  \nLa fecha y hora actuales son: {{ $now }}"
-          }
-        },
-        "type": "@n8n/n8n-nodes-langchain.agent",
-        "typeVersion": 1.9,
-        "position": [
-          864,
-          432
-        ],
-        "id": "0c9dd92a-5096-4d02-8f08-e9ea0bba4633",
-        "name": "AI Agent"
-      },
-      {
-        "parameters": {
-          "model": {
-            "__rl": true,
-            "mode": "list",
-            "value": "gpt-4o-mini"
-          },
-          "options": {}
-        },
-        "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
-        "typeVersion": 1.2,
-        "position": [
-          752,
-          704
-        ],
-        "id": "280b8fe1-8746-4710-b585-c28033a4558b",
-        "name": "OpenAI Chat Model"
-      },
-      {
-        "parameters": {
-          "sessionIdType": "customKey",
-          "sessionKey": "={{ $('Telegram Trigger').item.json.message.chat.id }}"
-        },
-        "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
-        "typeVersion": 1.3,
-        "position": [
-          912,
-          704
-        ],
-        "id": "a4dbcd3b-5693-4bd0-b09f-90679db743af",
-        "name": "Simple Memory"
-      },
-      {
-        "parameters": {},
-        "type": "@n8n/n8n-nodes-langchain.toolCalculator",
-        "typeVersion": 1,
-        "position": [
-          1232,
-          832
-        ],
-        "id": "2eef2080-158d-44a8-bd36-6f93b7ac99bf",
-        "name": "Calculator"
-      },
-      {
-        "parameters": {
-          "operation": "append",
-          "documentId": {
-            "__rl": true,
-            "value": "1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8",
-            "mode": "list",
-            "cachedResultName": "Gastos Mensuales",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8/edit#gid=0"
-          },
-          "columns": {
-            "mappingMode": "defineBelow",
-            "value": {
-              "Tipo de Gasto": "={{ $('Code').item.json.Tipo }}",
-              "Importe": "={{ $('Code').item.json.Importe }}",
-              "Dia": "={{ $('Code').item.json.Dia }}",
-              "Mes": "={{ $('Code').item.json.Mes }}",
-              "Año": "={{ $('Code').item.json['Año'] }}"
-            },
-            "matchingColumns": [],
-            "schema": [
-              {
-                "id": "Tipo de Gasto",
-                "displayName": "Tipo de Gasto",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Importe",
-                "displayName": "Importe",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Dia",
-                "displayName": "Dia",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Mes",
-                "displayName": "Mes",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Año",
-                "displayName": "Año",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              }
-            ],
-            "attemptToConvertTypes": false,
-            "convertFieldsToString": false
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1328,
-          832
-        ],
-        "id": "cd4ec915-f95f-4d4d-b511-6c4440728ee7",
-        "name": "Gastos"
-      },
-      {
-        "parameters": {
-          "operation": "append",
-          "documentId": {
-            "__rl": true,
-            "value": "1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M",
-            "mode": "list",
-            "cachedResultName": "Ingresos Mensuales",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M/edit#gid=0"
-          },
-          "columns": {
-            "mappingMode": "defineBelow",
-            "value": {
-              "Importe": "={{ $('Code').item.json.Importe }}",
-              "Dia": "={{ $('Code').item.json.Dia }}",
-              "Mes": "={{ $('Code').item.json.Mes }}",
-              "Año": "={{ $('Code').item.json['Año'] }}",
-              "Tipo de Ingreso": "={{ $('Code').item.json.Tipo }}"
-            },
-            "matchingColumns": [],
-            "schema": [
-              {
-                "id": "Tipo de Ingreso",
-                "displayName": "Tipo de Ingreso",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true,
-                "removed": false
-              },
-              {
-                "id": "Importe",
-                "displayName": "Importe",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Dia",
-                "displayName": "Dia",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Mes",
-                "displayName": "Mes",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Año",
-                "displayName": "Año",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              }
-            ],
-            "attemptToConvertTypes": false,
-            "convertFieldsToString": false
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1520,
-          832
-        ],
-        "id": "b127bc1c-6bea-459f-9747-fa6bc4680743",
-        "name": "Ingresos"
-      },
-      {
-        "parameters": {
-          "documentId": {
-            "__rl": true,
-            "value": "1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8",
-            "mode": "list",
-            "cachedResultName": "Gastos Mensuales",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1j1f265tfHAq6UhMzs6U84Q5wWYq8-NS9jkBkRQsvmN8/edit#gid=0"
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1424,
-          832
-        ],
-        "id": "a6171c2c-6cb5-4ec8-94b5-8dc5c1bf14de",
-        "name": "Ver Gastos"
-      },
-      {
-        "parameters": {
-          "documentId": {
-            "__rl": true,
-            "value": "1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M",
-            "mode": "list",
-            "cachedResultName": "Ingresos Mensuales",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Lx-CqbvP8quTko2c7ylL2iJJzlYrjshJeH7Hwlgnn_M/edit#gid=0"
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1632,
-          832
-        ],
-        "id": "144020fb-f12a-4a1b-b8b6-f8ec4beebf2c",
-        "name": "Ver Ingresos"
-      },
-      {
-        "parameters": {
-          "operation": "append",
-          "documentId": {
-            "__rl": true,
-            "value": "1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4",
-            "mode": "list",
-            "cachedResultName": "Contactos Nuevos",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4/edit#gid=0"
-          },
-          "columns": {
-            "mappingMode": "defineBelow",
-            "value": {
-              "Email": "={{ $('Code').item.json.Contacto_Email }}",
-              "Telefono": "={{ $('Code').item.json.Contacto_Telefono }}",
-              "Nombre": "={{ $('Code').item.json.Contacto_Nombre }}"
-            },
-            "matchingColumns": [],
-            "schema": [
-              {
-                "id": "Nombre",
-                "displayName": "Nombre",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Telefono",
-                "displayName": "Telefono",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              },
-              {
-                "id": "Email",
-                "displayName": "Email",
-                "required": false,
-                "defaultMatch": false,
-                "display": true,
-                "type": "string",
-                "canBeUsedToMatch": true
-              }
-            ],
-            "attemptToConvertTypes": false,
-            "convertFieldsToString": false
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1728,
-          832
-        ],
-        "id": "4ca9c136-a395-4862-91a5-55fdb640fb94",
-        "name": "Contactos"
-      },
-      {
-        "parameters": {
-          "documentId": {
-            "__rl": true,
-            "value": "1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4",
-            "mode": "list",
-            "cachedResultName": "Contactos Nuevos",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4/edit?usp=drivesdk"
-          },
-          "sheetName": {
-            "__rl": true,
-            "value": "gid=0",
-            "mode": "list",
-            "cachedResultName": "Hoja 1",
-            "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1ZacvpinSkU10bXV7Fcau1SFu-DQtAN5ubzEpIARGIq4/edit#gid=0"
-          },
-          "options": {}
-        },
-        "type": "n8n-nodes-base.googleSheetsTool",
-        "typeVersion": 4.5,
-        "position": [
-          1824,
-          832
-        ],
-        "id": "9867b2f8-d086-497a-8a3c-40189aa7237b",
-        "name": "Ver Contactos"
-      },
-      {
-        "parameters": {
-          "numberInputs": 3
-        },
-        "type": "n8n-nodes-base.merge",
-        "typeVersion": 3.1,
-        "position": [
-          912,
-          208
-        ],
-        "id": "ee33f6f4-cd85-4b22-8277-0f3f07b5d6d9",
-        "name": "Merge"
-      },
-      {
-        "parameters": {
-          "jsCode": "const mensaje = $input.item.json.text;\nconst fecha = new Date();\nlet output = {};\n\n// === GASTOS ===\nconst patronesGasto = [\n  /(\\d+)(?:\\s*euros?)?\\s+de\\s+gastos?\\s+de\\s+(.*)/i,\n  /gasto\\s+(\\d+)(?:\\s*euros?)?\\s+en\\s+(.*)/i,\n  /(\\d+)(?:\\s*euros?)?\\s+(.*)/i,\n  /añade\\s+(\\d+)(?:\\s*euros?)?\\s+(.*)/i,\n  /ayer\\s+(\\d+)(?:\\s*euros?)?\\s+(.*)/i\n];\n\nfor (const regex of patronesGasto) {\n  const match = mensaje.match(regex);\n  if (match) {\n    const importe = parseFloat(match[1]);\n    const tipoGasto = match[2].trim();\n\n    if (/ayer/i.test(mensaje)) {\n      fecha.setDate(fecha.getDate() - 1);\n    }\n\n    output = {\n      ...output,\n      Tipo: tipoGasto,\n      Importe: importe,\n      Dia: fecha.getDate(),\n      Mes: fecha.getMonth() + 1,\n      Año: fecha.getFullYear()\n    };\n\n    break;\n  }\n}\n\n// === CONTACTO ===\nconst contactoRegex = /(?:añade\\s+el\\s+)?contacto[:\\s]*[\"']?(.+?)[\"']?[,;\\s]+(\\d{6,})[,;\\s]+([\\w\\.-]+@[\\w\\.-]+\\.\\w+)/i;\nconst contactoMatch = mensaje.match(contactoRegex);\n\nif (contactoMatch) {\n  output = {\n    ...output,\n    Contacto_Nombre: contactoMatch[1].trim(),\n    Contacto_Telefono: contactoMatch[2].replace(/\\s+/g, \"\"),\n    Contacto_Email: contactoMatch[3].trim()\n  };\n}\n\n// === CITA ===\nconst citaRegex = /(?:el\\s+)?(?:día\\s+)?(\\d{1,2})(?:[\\/\\-\\.](\\d{1,2}))(?:[\\/\\-\\.](\\d{2,4}))?.*?(?:a\\s+las\\s+)?(\\d{1,2})(?::(\\d{2}))?/i;\nconst citaSimple = /(?:el\\s+)?(\\d{1,2})\\s+de\\s+([a-zA-Z]+).*?(\\d{1,2})(?::(\\d{2}))?/i;\nconst citaRelativa = /(mañana|pasado mañana|hoy|lunes|martes|miércoles|jueves|viernes|sábado|domingo).*?(\\d{1,2})(?::(\\d{2}))?/i;\n\nconst meses = {\n  enero: 0, febrero: 1, marzo: 2, abril: 3, mayo: 4, junio: 5,\n  julio: 6, agosto: 7, septiembre: 8, octubre: 9, noviembre: 10, diciembre: 11\n};\n\nfunction getDiaDeLaSemana(diaPalabra) {\n  const dias = [\"domingo\", \"lunes\", \"martes\", \"miércoles\", \"jueves\", \"viernes\", \"sábado\"];\n  const hoy = new Date();\n  const hoyNum = hoy.getDay();\n  const buscado = dias.indexOf(diaPalabra.toLowerCase());\n  let diferencia = buscado - hoyNum;\n  if (diferencia <= 0) diferencia += 7;\n  const fechaFinal = new Date();\n  fechaFinal.setDate(hoy.getDate() + diferencia);\n  return fechaFinal;\n}\n\nlet citaMatch = mensaje.match(citaRegex);\nif (citaMatch) {\n  const dia = parseInt(citaMatch[1]);\n  const mes = parseInt(citaMatch[2]) - 1;\n  const año = citaMatch[3] ? parseInt(citaMatch[3]) : new Date().getFullYear();\n  const hora = parseInt(citaMatch[4]);\n  const minutos = citaMatch[5] ? parseInt(citaMatch[5]) : 0;\n\n  const fechaCita = new Date(año, mes, dia, hora, minutos);\n\n  output = {\n    ...output,\n    Cita_FechaCompleta: fechaCita.toISOString(),\n    Cita_Dia: dia,\n    Cita_Mes: mes + 1,\n    Cita_Año: año,\n    Cita_Hora: hora,\n    Cita_Minutos: minutos\n  };\n} else if ((citaMatch = mensaje.match(citaSimple))) {\n  const dia = parseInt(citaMatch[1]);\n  const mesTexto = citaMatch[2].toLowerCase();\n  const mes = meses[mesTexto] ?? new Date().getMonth();\n  const hora = parseInt(citaMatch[3]);\n  const minutos = citaMatch[4] ? parseInt(citaMatch[4]) : 0;\n  const año = new Date().getFullYear();\n  const fechaCita = new Date(año, mes, dia, hora, minutos);\n\n  output = {\n    ...output,\n    Cita_FechaCompleta: fechaCita.toISOString(),\n    Cita_Dia: dia,\n    Cita_Mes: mes + 1,\n    Cita_Año: año,\n    Cita_Hora: hora,\n    Cita_Minutos: minutos\n  };\n} else if ((citaMatch = mensaje.match(citaRelativa))) {\n  let fecha = new Date();\n  const palabra = citaMatch[1].toLowerCase();\n  if (palabra === \"mañana\") {\n    fecha.setDate(fecha.getDate() + 1);\n  } else if (palabra === \"pasado mañana\") {\n    fecha.setDate(fecha.getDate() + 2);\n  } else if (palabra !== \"hoy\") {\n    fecha = getDiaDeLaSemana(palabra);\n  }\n\n  const hora = parseInt(citaMatch[2]);\n  const minutos = citaMatch[3] ? parseInt(citaMatch[3]) : 0;\n  fecha.setHours(hora);\n  fecha.setMinutes(minutos);\n\n  output = {\n    ...output,\n    Cita_FechaCompleta: fecha.toISOString(),\n    Cita_Dia: fecha.getDate(),\n    Cita_Mes: fecha.getMonth() + 1,\n    Cita_Año: fecha.getFullYear(),\n    Cita_Hora: hora,\n    Cita_Minutos: minutos\n  };\n}\n\n// === MENSAJE VACÍO → dejar pasar mensaje original si no se extrajo nada\nif (Object.keys(output).length === 0) {\n  return [{\n    json: {\n      texto_original: mensaje\n    }\n  }];\n}\n\n// === SALIDA FINAL\nreturn [{ json: output }];\n\n"
-        },
-        "type": "n8n-nodes-base.code",
-        "typeVersion": 2,
-        "position": [
-          1152,
-          208
-        ],
-        "id": "4dc558f9-b916-4507-b903-738b7903f408",
-        "name": "Code"
-      },
-      {
-        "parameters": {
-          "sendTo": "={{ $fromAI('To', ``, 'string') }}",
-          "subject": "={{ $fromAI('Subject', ``, 'string') }}",
-          "message": "={{ $fromAI('Message', ``, 'string') }} \nNo olvides suscribirte al canal https://youtube.com/@agentesinteligenciaartificial?si=6tiMpXU0X8GAPKiD",
-          "options": {
-            "appendAttribution": false
-          }
-        },
-        "type": "n8n-nodes-base.gmailTool",
-        "typeVersion": 2.1,
-        "position": [
-          1920,
-          832
-        ],
-        "id": "7048197c-a960-4423-bc56-08f170d0b5c1",
-        "name": "Gmail",
-        "webhookId": "db4358b5-ce03-4328-8596-fa8d4281bb23"
-      },
-      {
-        "parameters": {
-          "calendar": {
-            "__rl": true,
-            "value": "9a609688b40d3b3d37bab99ecb519bfcbbf803b7b8fdc62c045972d3369efe44@group.calendar.google.com",
-            "mode": "list",
-            "cachedResultName": "CITAS ASISTENTE"
-          },
-          "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', ``, 'string') }}",
-          "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', ``, 'string') }}",
-          "additionalFields": {
-            "description": "={{ $('Merge').item.json.text }}",
-            "summary": "={{ $('Code').item.json.Tipo }}"
-          }
-        },
-        "type": "n8n-nodes-base.googleCalendarTool",
-        "typeVersion": 1.3,
-        "position": [
-          1104,
-          832
-        ],
-        "id": "acc79b2d-ed57-4d07-ad5f-e62839e720a0",
-        "name": "AGREGAR CITAS"
-      },
-      {
-        "parameters": {
-          "descriptionType": "manual",
-          "toolDescription": "Busca las citas que tengo en el calendario que se parezcan a la consulta",
-          "operation": "get",
-          "calendar": {
-            "__rl": true,
-            "value": "9a609688b40d3b3d37bab99ecb519bfcbbf803b7b8fdc62c045972d3369efe44@group.calendar.google.com",
-            "mode": "list",
-            "cachedResultName": "CITAS ASISTENTE"
-          },
-          "eventId": "={{ $fromAI('Event_ID', ``, 'string') }}",
-          "options": {
-            "timeZone": {
-              "__rl": true,
-              "value": "Europe/Madrid",
-              "mode": "list",
-              "cachedResultName": "Europe/Madrid"
-            }
-          }
-        },
-        "type": "n8n-nodes-base.googleCalendarTool",
-        "typeVersion": 1.3,
-        "position": [
-          960,
-          832
-        ],
-        "id": "7ab2e166-ee90-4764-a015-240256eb2ed9",
-        "name": "VER CITAS"
-      },
-      {
-        "parameters": {
-          "content": "ASISTENTE PERSONAL y ASISTENTE FINANCIERO!!\nControla todos tus gastos y tu agenda con tus contactos",
-          "height": 960,
-          "width": 2060
-        },
-        "type": "n8n-nodes-base.stickyNote",
-        "position": [
-          0,
-          0
-        ],
-        "typeVersion": 1,
-        "id": "8179e4da-aa45-4d0a-b47b-39d2290cd500",
-        "name": "Sticky Note"
-      },
-      {
-        "parameters": {
-          "resource": "file",
-          "fileId": "={{ $json.message.voice.file_id }}",
-          "additionalFields": {}
-        },
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [
-          512,
-          208
-        ],
-        "id": "52ca5c8b-7168-4531-8bb8-18955b40f15c",
-        "name": "Audio Telegram",
-        "webhookId": "19fae0ff-7795-443a-90c5-4291fbe6ae06"
-      },
-      {
-        "parameters": {
-          "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
-          "text": "={{ $json.output }}\n",
-          "additionalFields": {
-            "appendAttribution": false
-          }
-        },
-        "type": "n8n-nodes-base.telegram",
-        "typeVersion": 1.2,
-        "position": [
-          1328,
-          432
-        ],
-        "id": "331e607c-bb22-4c73-ac83-0f0990b18cd3",
-        "name": "Enviar Mensaje",
-        "webhookId": "a12d0a29-3a06-4cd6-9d22-8757e28af558",
-        "notesInFlow": false
-      },
-      {
-        "parameters": {
-          "resource": "audio",
-          "operation": "transcribe",
-          "options": {}
-        },
-        "type": "@n8n/n8n-nodes-langchain.openAi",
-        "typeVersion": 1.8,
-        "position": [
-          672,
-          208
-        ],
-        "id": "a11a5558-30e3-4485-b162-10c7e66eab36",
-        "name": "Transcriptor"
-      }
-    ],
-    "connections": {
-      "Telegram Trigger": {
-        "main": [
-          [
-            {
-              "node": "Switch",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Switch": {
-        "main": [
-          [
-            {
-              "node": "Edit Fields",
-              "type": "main",
-              "index": 0
-            }
-          ],
-          [
-            {
-              "node": "Audio Telegram",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Edit Fields": {
-        "main": [
-          [
-            {
-              "node": "Merge",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "OpenAI Chat Model": {
-        "ai_languageModel": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_languageModel",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Simple Memory": {
-        "ai_memory": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_memory",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "AI Agent": {
-        "main": [
-          [
-            {
-              "node": "Enviar Mensaje",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Calculator": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Gastos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Ingresos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Ver Gastos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Ver Ingresos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Contactos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Ver Contactos": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Merge": {
-        "main": [
-          [
-            {
-              "node": "Code",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Code": {
-        "main": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Gmail": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "AGREGAR CITAS": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "VER CITAS": {
-        "ai_tool": [
-          [
-            {
-              "node": "AI Agent",
-              "type": "ai_tool",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Audio Telegram": {
-        "main": [
-          [
-            {
-              "node": "Transcriptor",
-              "type": "main",
-              "index": 0
-            }
-          ]
-        ]
-      },
-      "Transcriptor": {
-        "main": [
-          [
-            {
-              "node": "Merge",
-              "type": "main",
-              "index": 1
-            }
-          ]
-        ]
-      }
-    },
-    "settings": {
-      "executionOrder": "v1"
-    },
-    "staticData": null,
-    "meta": null,
-    "pinData": {},
-    "versionId": "40105217-c6fc-4d52-8e16-3577307994f0",
-    "activeVersionId": null,
-    "triggerCount": 0,
-    "shared": [
-      {
-        "updatedAt": "2025-08-22T00:56:20.662Z",
-        "createdAt": "2025-08-22T00:56:20.662Z",
-        "role": "workflow:owner",
-        "workflowId": "RpTYO3XGVfE22Xen",
-        "projectId": "CyuOAJo56zhDqPtw"
-      }
-    ],
-    "activeVersion": null,
-    "tags": [
-      {
-        "updatedAt": "2025-08-22T00:55:44.141Z",
-        "createdAt": "2025-08-22T00:55:44.141Z",
-        "id": "0KpvxAXYSSyyfxeJ",
-        "name": "Aitech2.com"
-      },
-      {
-        "updatedAt": "2025-08-22T00:55:44.152Z",
-        "createdAt": "2025-08-22T00:55:44.152Z",
-        "id": "D4vyLTVdQAWL1u8F",
-        "name": "Carlos Miró IA"
-      }
-    ]
   }
 ]
