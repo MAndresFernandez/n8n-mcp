@@ -1,5 +1,5 @@
 {
-    "name": "WhatsApp Status Publisher (DB Driven)",
+    "name": "WhatsApp Status Publisher (DB Driven - Postgres)",
     "nodes": [
         {
             "parameters": {
@@ -18,30 +18,24 @@
         },
         {
             "parameters": {
-                "operation": "get",
-                "tableId": "whatsapp_statuses",
-                "filters": {
-                    "conditions": [
-                        {
-                            "keyName": "id",
-                            "value": "={{ $json.body.id }}",
-                            "operator": "equal"
-                        }
-                    ]
+                "operation": "executeQuery",
+                "query": "SELECT * FROM whatsapp_statuses WHERE id = $1",
+                "additionalFields": {
+                    "queryParams": "={{ $json.body.id }}"
                 }
             },
-            "type": "n8n-nodes-base.supabase",
-            "typeVersion": 1,
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
             "position": [
                 220,
                 0
             ],
-            "id": "supabase-get",
-            "name": "Supabase Get Record",
+            "id": "postgres-get",
+            "name": "Get Record (Postgres)",
             "credentials": {
-                "supabaseApi": {
-                    "id": "SUPABASE_CRED_ID",
-                    "name": "Supabase Account"
+                "postgres": {
+                    "id": "POSTGRES_CRED_ID",
+                    "name": "Supabase Postgres"
                 }
             }
         },
@@ -215,27 +209,24 @@
         },
         {
             "parameters": {
-                "operation": "update",
-                "tableId": "whatsapp_statuses",
-                "updateKey": "id",
-                "value": "={{ $('Webhook Trigger').item.json.body.id }}",
-                "fields": {
-                    "status": "published",
-                    "published_at": "={{ new Date().toISOString() }}"
+                "operation": "executeQuery",
+                "query": "UPDATE whatsapp_statuses SET status = 'published', published_at = NOW() WHERE id = $1",
+                "additionalFields": {
+                    "queryParams": "={{ $('Webhook Trigger').item.json.body.id }}"
                 }
             },
-            "type": "n8n-nodes-base.supabase",
-            "typeVersion": 1,
+            "type": "n8n-nodes-base.postgres",
+            "typeVersion": 2.4,
             "position": [
                 1000,
                 0
             ],
-            "id": "supabase-update",
-            "name": "Update Status Published",
+            "id": "postgres-update",
+            "name": "Update Status (Postgres)",
             "credentials": {
-                "supabaseApi": {
-                    "id": "SUPABASE_CRED_ID",
-                    "name": "Supabase Account"
+                "postgres": {
+                    "id": "POSTGRES_CRED_ID",
+                    "name": "Supabase Postgres"
                 }
             }
         }
@@ -245,14 +236,14 @@
             "main": [
                 [
                     {
-                        "node": "Supabase Get Record",
+                        "node": "Get Record (Postgres)",
                         "type": "main",
                         "index": 0
                     }
                 ]
             ]
         },
-        "Supabase Get Record": {
+        "Get Record (Postgres)": {
             "main": [
                 [
                     {
@@ -292,7 +283,7 @@
             "main": [
                 [
                     {
-                        "node": "Update Status Published",
+                        "node": "Update Status (Postgres)",
                         "type": "main",
                         "index": 0
                     }
@@ -303,7 +294,7 @@
             "main": [
                 [
                     {
-                        "node": "Update Status Published",
+                        "node": "Update Status (Postgres)",
                         "type": "main",
                         "index": 0
                     }
@@ -314,7 +305,7 @@
             "main": [
                 [
                     {
-                        "node": "Update Status Published",
+                        "node": "Update Status (Postgres)",
                         "type": "main",
                         "index": 0
                     }
