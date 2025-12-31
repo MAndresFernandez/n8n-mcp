@@ -1,0 +1,271 @@
+{
+    "name": "WhatsApp Status Publisher (Evolution API)",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "whatsapp-status",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                0,
+                0
+            ],
+            "id": "webhook-trigger",
+            "name": "Webhook Trigger"
+        },
+        {
+            "parameters": {
+                "rules": {
+                    "values": [
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $json.tipo }}",
+                                        "rightValue": "text",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Text"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $json.tipo }}",
+                                        "rightValue": "image",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Image"
+                        },
+                        {
+                            "conditions": {
+                                "options": {
+                                    "caseSensitive": true,
+                                    "leftValue": "",
+                                    "typeValidation": "strict",
+                                    "version": 2
+                                },
+                                "conditions": [
+                                    {
+                                        "leftValue": "={{ $json.tipo }}",
+                                        "rightValue": "video",
+                                        "operator": {
+                                            "type": "string",
+                                            "operation": "equals"
+                                        }
+                                    }
+                                ],
+                                "combinator": "and"
+                            },
+                            "renameOutput": true,
+                            "outputKey": "Video"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.switch",
+            "typeVersion": 3.2,
+            "position": [
+                250,
+                0
+            ],
+            "id": "switch-type",
+            "name": "Check content type"
+        },
+        {
+            "parameters": {
+                "resource": "messages-api",
+                "operation": "sendText",
+                "instanceName": "YOUR_INSTANCE_NAME",
+                "remoteJid": "status@broadcast",
+                "messageText": "={{ $json.contenido }}",
+                "options_message": {
+                    "backgroundColor": "#FF0000",
+                    "font": 1
+                }
+            },
+            "type": "n8n-nodes-evolution-api.evolutionApi",
+            "typeVersion": 1,
+            "position": [
+                500,
+                -100
+            ],
+            "id": "evo-send-text",
+            "name": "Evolution Send Text",
+            "credentials": {
+                "evolutionApi": {
+                    "id": "placeholder_id",
+                    "name": "Evolution API Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "resource": "messages-api",
+                "operation": "sendMedia",
+                "instanceName": "YOUR_INSTANCE_NAME",
+                "remoteJid": "status@broadcast",
+                "mediaUrl": "={{ $json.contenido }}",
+                "mediaType": "image",
+                "caption": "={{ $json.caption }}",
+                "options_message": {}
+            },
+            "type": "n8n-nodes-evolution-api.evolutionApi",
+            "typeVersion": 1,
+            "position": [
+                500,
+                100
+            ],
+            "id": "evo-send-image",
+            "name": "Evolution Send Image",
+            "credentials": {
+                "evolutionApi": {
+                    "id": "placeholder_id",
+                    "name": "Evolution API Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "resource": "messages-api",
+                "operation": "sendMedia",
+                "instanceName": "YOUR_INSTANCE_NAME",
+                "remoteJid": "status@broadcast",
+                "mediaUrl": "={{ $json.contenido }}",
+                "mediaType": "video",
+                "caption": "={{ $json.caption }}",
+                "options_message": {}
+            },
+            "type": "n8n-nodes-evolution-api.evolutionApi",
+            "typeVersion": 1,
+            "position": [
+                500,
+                300
+            ],
+            "id": "evo-send-video",
+            "name": "Evolution Send Video",
+            "credentials": {
+                "evolutionApi": {
+                    "id": "placeholder_id",
+                    "name": "Evolution API Account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "{\n  \"success\": true,\n  \"message\": \"Status queued\",\n  \"type\": \"{{ $json.tipo }}\"\n}",
+                "options": {}
+            },
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                800,
+                0
+            ],
+            "id": "response-success",
+            "name": "Respond Success"
+        }
+    ],
+    "connections": {
+        "Webhook Trigger": {
+            "main": [
+                [
+                    {
+                        "node": "Check content type",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check content type": {
+            "main": [
+                [
+                    {
+                        "node": "Evolution Send Text",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Evolution Send Image",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Evolution Send Video",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Evolution Send Text": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Evolution Send Image": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Evolution Send Video": {
+            "main": [
+                [
+                    {
+                        "node": "Respond Success",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
