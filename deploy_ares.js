@@ -60,7 +60,7 @@ const ARES_CHAT_HANDLER = {
         {
             parameters: {
                 tableName: "chat_history",
-                sessionIdKey: "={{ $json.body.key.remoteJid }}",
+                sessionIdKey: "={{ $('webhook-trigger').item.json.body.key.remoteJid }}",
                 postgresOptions: {
                     user: "postgres",
                     host: "db.qvxxhwcspqntdesrajph.supabase.co",
@@ -73,52 +73,37 @@ const ARES_CHAT_HANDLER = {
             type: "@n8n/n8n-nodes-langchain.memoryPostgresChat",
             typeVersion: 1,
             position: [750, 500]
+        },
+        {
+            parameters: {
+                resource: "messages-api",
+                operation: "sendText",
+                instanceName: "ARES",
+                messageText: "={{ $json.output }}",
+                remoteJid: "={{ $('webhook-trigger').item.json.body.key.remoteJid }}"
+            },
+            id: "evolution-send",
+            name: "Evolution Send",
+            type: "n8n-nodes-evolution-api.evolutionApi",
+            typeVersion: 1,
+            position: [1100, 300]
         }
     ],
     connections: {
         "webhook-trigger": {
-            main: [
-                [
-                    {
-                        node: "filter-from-me",
-                        type: "main",
-                        index: 0
-                    }
-                ]
-            ]
+            main: [[{ node: "filter-from-me", type: "main", index: 0 }]]
         },
         "filter-from-me": {
-            main: [
-                [
-                    {
-                        node: "ai-agent",
-                        type: "main",
-                        index: 0
-                    }
-                ]
-            ]
+            main: [[{ node: "ai-agent", type: "main", index: 0 }]]
         },
         "chat-model": {
-            ai_languageModel: [
-                [
-                    {
-                        node: "ai-agent",
-                        type: "ai_languageModel",
-                        index: 0
-                    }
-                ]
-            ]
+            ai_languageModel: [[{ node: "ai-agent", type: "ai_languageModel", index: 0 }]]
         },
         "chat-memory": {
-            ai_memory: [
-                [
-                    {
-                        node: "ai-agent",
-                        type: "ai_memory",
-                        index: 0
-                    }
-                ]
-            ]
+            ai_memory: [[{ node: "ai-agent", type: "ai_memory", index: 0 }]]
+        },
+        "ai-agent": {
+            main: [[{ node: "evolution-send", type: "main", index: 0 }]]
         }
     }
 };
@@ -143,21 +128,95 @@ const ARES_CRON_JOBS = {
         },
         {
             parameters: {
-                operation: "select",
-                schema: "public",
-                table: "users",
-                returnAll: true
+                operation: "executeQuery",
+                query: "SELECT * FROM users",
+                options: {}
             },
-            id: "get-users",
-            name: "Get Active Users",
-            type: "n8n-nodes-base.supabase",
-            typeVersion: 1,
+            id: "postgres-get-users",
+            name: "Get Users (Postgres)",
+            type: "n8n-nodes-base.postgres",
+            typeVersion: 2.4,
             position: [450, 300]
+        },
+        {
+            parameters: {
+                batchSize: 1,
+                options: {}
+            },
+            id: "split-batch",
+            name: "Split In Batches",
+            type: "n8n-nodes-base.splitInBatches",
+            typeVersion: 3,
+            position: [650, 300]
+        },
+        {
+            parameters: {
+                conditions: {
+                    number: [
+                        {
+                            value1: "={{ $now.hour }}",
+                            operation: "smaller",
+                            value2: 12
+                        }
+                    ]
+                }
+            },
+            id: "check-time",
+            name: "Check Time (AM/PM)",
+            type: "n8n-nodes-base.if",
+            typeVersion: 2,
+            position: [850, 300]
+        },
+        {
+            parameters: {
+                resource: "messages-api",
+                operation: "sendText",
+                instanceName: "ARES",
+                messageText: "Memento Mori. ¿Estás listo para conquistar tu día? Define tu propósito y mantén la guardia alta.",
+                remoteJid: "={{ $json.whatsapp_phone }}"
+            },
+            id: "send-morning",
+            name: "Send Morning Message",
+            type: "n8n-nodes-evolution-api.evolutionApi",
+            typeVersion: 1,
+            position: [1100, 200]
+        },
+        {
+            parameters: {
+                resource: "messages-api",
+                operation: "sendText",
+                instanceName: "ARES",
+                messageText: "Check-in Nocturno: ¿Has mantenido tu soberanía hoy? Responde con tu estado (1-10) y breve reflexión.",
+                remoteJid: "={{ $json.whatsapp_phone }}"
+            },
+            id: "send-night",
+            name: "Send Night Message",
+            type: "n8n-nodes-evolution-api.evolutionApi",
+            typeVersion: 1,
+            position: [1100, 400]
         }
     ],
     connections: {
         "cron-trigger": {
-            main: [[{ node: "get-users", type: "main", index: 0 }]]
+            main: [[{ node: "postgres-get-users", type: "main", index: 0 }]]
+        },
+        "postgres-get-users": {
+            main: [[{ node: "split-batch", type: "main", index: 0 }]]
+        },
+        "split-batch": {
+            main: [[{ node: "check-time", type: "main", index: 0 }]]
+        },
+        "check-time": {
+            main: [
+                [{ node: "send-morning", type: "main", index: 0 }], // True (AM)
+                [{ node: "send-night", type: "main", index: 0 }]    // False (PM)
+            ]
+        },
+        "send-morning": {
+            main: [[{ node: "split-batch", type: "main", index: 0 }]] // Loop back
+        },
+        "send-night": {
+            main: [[{ node: "split-batch", type: "main", index: 0 }]] // Loop back
         }
     }
 };
