@@ -19,10 +19,8 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "SELECT * FROM whatsapp_statuses WHERE id = $1",
-                "additionalFields": {
-                    "queryParams": "={{ $json.body.id }}"
-                }
+                "query": "SELECT * FROM whatsapp_statuses WHERE id = '{{ $json.body.id }}'",
+                "options": {}
             },
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.4,
@@ -210,10 +208,8 @@
         {
             "parameters": {
                 "operation": "executeQuery",
-                "query": "UPDATE whatsapp_statuses SET status = 'published', published_at = NOW() WHERE id = $1",
-                "additionalFields": {
-                    "queryParams": "={{ $('Webhook Trigger').item.json.body.id }}"
-                }
+                "query": "UPDATE whatsapp_statuses SET status = 'published', published_at = NOW() WHERE id = '{{ $('Webhook Trigger').first().json.body.id || $('Webhook Trigger').first().json.id }}'",
+                "options": {}
             },
             "type": "n8n-nodes-base.postgres",
             "typeVersion": 2.4,
